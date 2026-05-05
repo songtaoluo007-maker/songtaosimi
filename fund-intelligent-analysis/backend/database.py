@@ -61,6 +61,8 @@ def _ensure_sqlite_columns():
             if name not in existing_holdings:
                 conn.exec_driver_sql(f"ALTER TABLE holdings ADD COLUMN {name} {ddl}")
 
+        conn.exec_driver_sql("UPDATE news SET keyword = '快讯' WHERE keyword = '今日快讯'")
+
         conn.exec_driver_sql(
             """
             CREATE TABLE IF NOT EXISTS fund_groups (

@@ -53,11 +53,12 @@ def refresh_market_data():
 def get_live_board_rankings(
     snapshot_type: str = Query("sector", enum=["sector", "concept"]),
     limit: int = Query(20, ge=5, le=50),
+    live: bool = Query(False),
 ):
-    """行业/概念交易日热度与资金流入排行"""
+    """行业/概念热度与资金流入排行。默认读取本地缓存，live=true 时尝试实时源。"""
     try:
         from backend.services.market_collector import get_board_rankings
-        return get_board_rankings(snapshot_type, limit)
+        return get_board_rankings(snapshot_type, limit, live=live)
     except Exception as e:
         return {
             "snapshot_type": snapshot_type,

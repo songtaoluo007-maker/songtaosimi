@@ -34,7 +34,8 @@ export const getTradeStats = () => request.get('/trades/stats')
 // 行情数据
 export const getIndices = () => request.get('/market/indices')
 export const getSectors = (type = 'sector') => request.get('/market/sectors', { params: { snapshot_type: type } })
-export const getBoardRankings = (type = 'sector', limit = 20) => request.get('/market/board-rankings', { params: { snapshot_type: type, limit }, timeout: 60000 })
+export const getBoardRankings = (type = 'sector', limit = 20, live = false) =>
+  request.get('/market/board-rankings', { params: { snapshot_type: type, limit, live }, timeout: 60000 })
 export const getGlobalIndices = () => request.get('/market/global')
 export const refreshMarketData = () => request.post('/market/refresh', {}, { timeout: 120000 })
 export const getFundEstimate = (code: string) => request.get(`/market/fund-estimate/${code}`)
@@ -43,7 +44,7 @@ export const getMarketDetail = (symbol: string, params?: any) => request.get(`/m
 
 // 新闻
 export const getNews = (params?: any) => request.get('/news', { params })
-export const refreshNews = () => request.post('/news/refresh')
+export const refreshNews = () => request.post('/news/refresh', {}, { timeout: 120000 })
 
 // AI建议
 export const getAiAdvices = (limit = 30) => request.get('/ai/advice', { params: { limit } })
@@ -56,7 +57,7 @@ export const uploadOcr = (formData: FormData, source: string) => {
   formData.append('source', source)
   return request.post('/ocr/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 60000,
+    timeout: 180000,
   })
 }
 export const confirmOcr = (items: any[]) => request.post('/ocr/confirm', items)
@@ -65,7 +66,7 @@ export const confirmOcr = (items: any[]) => request.post('/ocr/confirm', items)
 export const uploadOcrTrades = (formData: FormData) => {
   return request.post('/ocr/upload-trades', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 60000,
+    timeout: 180000,
   })
 }
 
@@ -82,4 +83,5 @@ export const getAssetAllocation = () => request.get('/dashboard/asset-allocation
 // 设置
 export const getSettings = () => request.get('/settings')
 export const getSchedulerStatus = () => request.get('/settings/scheduler-status')
+export const getDiagnostics = () => request.get('/settings/diagnostics')
 export const triggerJob = (jobId: string) => request.post(`/settings/scheduler/trigger/${jobId}`)
