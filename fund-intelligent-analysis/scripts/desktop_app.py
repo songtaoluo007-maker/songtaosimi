@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 URL = "http://127.0.0.1:8000"
+PORT = 8000
 LOG_DIR = ROOT / "data" / "logs"
 ICON = ROOT / "assets" / "fund-ai.ico"
 PNG_ICON = ROOT / "assets" / "fund-ai-128.png"
@@ -31,21 +32,97 @@ def is_healthy() -> bool:
         return False
 
 
+def _creationflags() -> int:
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+
+def _listening_pids(port: int) -> list[int]:
+    try:
+        output = subprocess.check_output(
+            ["netstat", "-ano", "-p", "tcp"],
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            creationflags=_creationflags(),
+        )
+    except Exception as exc:
+        log(f"netstat failed: {type(exc).__name__}: {exc}")
+        return []
+    pids = []
+    marker = f":{port}"
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[0].upper().startswith("TCP") and parts[3].upper() == "LISTENING":
+            if parts[1].endswith(marker) or marker in parts[1]:
+                try:
+                    pids.append(int(parts[-1]))
+                except ValueError:
+                    continue
+    return sorted(set(pids))
+
+
+def _process_command_line(pid: int) -> str:
+    command = (
+        "try { "
+        f"(Get-CimInstance Win32_Process -Filter \"ProcessId = {pid}\").CommandLine "
+        "} catch { '' }"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            creationflags=_creationflags(),
+            timeout=5,
+        )
+        return (result.stdout or "").strip()
+    except Exception as exc:
+        log(f"query pid {pid} failed: {type(exc).__name__}: {exc}")
+        return ""
+
+
+def release_stale_backend_port() -> None:
+    """清理本项目残留的非健康后端进程，避免断电后端口被占用。"""
+    if is_healthy():
+        return
+    root_text = str(ROOT).lower()
+    for pid in _listening_pids(PORT):
+        if pid == os.getpid():
+            continue
+        cmdline = _process_command_line(pid)
+        normalized_cmd = cmdline.lower().replace("/", "\\")
+        if root_text not in normalized_cmd and "scripts\\run_backend.py" not in normalized_cmd:
+            log(f"port {PORT} occupied by unrelated pid {pid}: {cmdline}")
+            continue
+        log(f"killing stale backend pid {pid}: {cmdline}")
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                capture_output=True,
+                creationflags=_creationflags(),
+                timeout=8,
+            )
+        except Exception as exc:
+            log(f"taskkill pid {pid} failed: {type(exc).__name__}: {exc}")
+
+
 def start_backend() -> subprocess.Popen | None:
     if is_healthy():
         log("backend already healthy")
         return None
+    release_stale_backend_port()
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stdout = open(LOG_DIR / "desktop_backend_stdout.log", "ab", buffering=0)
     stderr = open(LOG_DIR / "desktop_backend_stderr.log", "ab", buffering=0)
-    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     log("starting backend")
     return subprocess.Popen(
         [sys.executable, str(ROOT / "scripts" / "run_backend.py")],
         cwd=str(ROOT),
         stdout=stdout,
         stderr=stderr,
-        creationflags=creationflags,
+        creationflags=_creationflags(),
     )
 
 

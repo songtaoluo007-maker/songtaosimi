@@ -75,12 +75,14 @@ class AiAdvisorService:
         opportunity_summary = self._build_opportunity_summary(market_context)
         news_summary = self._build_news_summary()
         data_quality = self._build_data_quality(market_context)
+        quality_summary = self._build_quality_summary(data_quality)
 
         # 检查是否有持仓
         if not portfolio:
             return {"error": "当前无持仓，请先添加持仓后再获取建议"}
 
         # 2. 组装Prompt
+        advice_goal = "今日收盘前最后半小时的持仓建议" if market_context["is_trading_day"] else "休市期间复盘建议"
         user_prompt = f"""## 一、A股市场行情（{market_context['market_date_label']}）
 {market_summary}
 
@@ -99,7 +101,10 @@ class AiAdvisorService:
 ## 六、数据新鲜度
 {json.dumps(data_quality, ensure_ascii=False)}
 
-请根据以上信息，给出今日收盘前最后半小时的持仓建议，并补充尚未明显持有但值得关注或分批买入的机会板块。"""
+## 七、系统体检风险
+{quality_summary}
+
+请根据以上信息，给出{advice_goal}，并补充尚未明显持有但值得关注或分批买入的机会板块。"""
         if not market_context["is_trading_day"]:
             user_prompt += "\n\n特别注意：当前为A股休市日，本次建议是休市期间复盘建议。所有行情、资金流和板块热度只能表述为最近交易日数据，不得写“今日主力净流入”“今日涨跌”“今日尾盘”。"
 
@@ -391,7 +396,45 @@ class AiAdvisorService:
             "latest_fund_estimate_time": str(latest_fund.snapshot_time) if latest_fund else None,
             "recent_news_count": recent_news_count,
             "news_lookback_days": settings.AI_NEWS_LOOKBACK_DAYS,
-        }
+        } | self._build_diagnostics_quality()
+
+    def _build_diagnostics_quality(self) -> dict:
+        try:
+            from backend.services.system_diagnostics import build_diagnostics
+
+            diagnostics = build_diagnostics(self.db)
+            issues = [
+                {
+                    "title": item.get("title"),
+                    "status": item.get("status"),
+                    "message": item.get("message"),
+                }
+                for item in diagnostics.get("checks", [])
+                if item.get("status") != "ok"
+            ][:8]
+            return {
+                "diagnostics_status": diagnostics.get("status"),
+                "diagnostics_summary": diagnostics.get("summary"),
+                "diagnostics_issues": issues,
+            }
+        except Exception as e:
+            logger.warning(f"AI数据体检读取失败: {e}")
+            return {
+                "diagnostics_status": "unknown",
+                "diagnostics_summary": {},
+                "diagnostics_issues": [{"title": "系统体检", "status": "warning", "message": str(e)}],
+            }
+
+    def _build_quality_summary(self, data_quality: dict) -> str:
+        issues = data_quality.get("diagnostics_issues") or []
+        if not issues:
+            return "系统体检未发现明显异常，仍需按实时行情和持仓风险谨慎判断。"
+        lines = [
+            "以下体检项会影响建议可信度：如果新闻、行情、估值任一关键数据陈旧，必须降低 confidence，避免给出过强买入结论。"
+        ]
+        for item in issues:
+            lines.append(f"- {item.get('title')}: {item.get('status')}，{item.get('message')}")
+        return "\n".join(lines)
 
     def _normalize_market_view(self, value: str) -> str:
         text = str(value or "").lower()
@@ -483,11 +526,16 @@ class AiAdvisorService:
     def _call_ai(self, user_prompt: str) -> tuple:
         """调用DeepSeek API"""
         try:
+            if not settings.DEEPSEEK_API_KEY or settings.DEEPSEEK_API_KEY == "your_deepseek_api_key_here":
+                logger.warning("DeepSeek API Key 未配置，跳过AI调用")
+                return "", "", 0
+
             from openai import OpenAI
 
             client = OpenAI(
                 api_key=settings.DEEPSEEK_API_KEY,
                 base_url=settings.DEEPSEEK_BASE_URL,
+                timeout=180,
             )
 
             response = client.chat.completions.create(

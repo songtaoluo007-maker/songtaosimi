@@ -36,6 +36,14 @@ def get_scheduler_status():
     return get_scheduler_status()
 
 
+@router.get("/diagnostics")
+def get_diagnostics(db: Session = Depends(get_db)):
+    """系统体检：数据新鲜度、调度器、AI Key、日志和数据库状态。"""
+    from backend.services.system_diagnostics import build_diagnostics
+
+    return build_diagnostics(db)
+
+
 @router.post("/scheduler/trigger/{job_id}")
 def trigger_job(job_id: str):
     """手动触发某个定时任务"""

@@ -429,16 +429,92 @@ def _collect_sectors_akshare(db, today, now_time) -> int:
     return count
 
 
-def get_board_rankings(snapshot_type: str = "sector", limit: int = 20) -> dict:
-    """Return live heat and main-capital rankings for industry/concept boards."""
+def _get_cached_board_rankings(snapshot_type: str = "sector", limit: int = 20, warning: str = "") -> dict:
+    """Fast local fallback for board rankings based on the latest stored snapshots."""
+    trading_day = is_trading_day()
+    latest_label = "交易日" if trading_day else "最近交易日"
+    db = SessionLocal()
+    try:
+        latest = db.query(MarketSnapshot.snapshot_date).filter(
+            MarketSnapshot.snapshot_type == snapshot_type,
+        ).order_by(MarketSnapshot.snapshot_date.desc()).first()
+        snapshots = []
+        if latest:
+            snapshots = db.query(MarketSnapshot).filter(
+                MarketSnapshot.snapshot_type == snapshot_type,
+                MarketSnapshot.snapshot_date == latest[0],
+            ).all()
+
+        rows = []
+        for s in snapshots:
+            item = s.to_dict()
+            change_pct = float(item.get("change_pct") or 0)
+            turnover = float(item.get("turnover") or 0)
+            turnover_score = abs(turnover) / 100000000
+            heat_score = turnover_score + abs(change_pct) * 10 + max(change_pct, 0) * 8
+            proxy_inflow = turnover if change_pct >= 0 else -turnover
+            rows.append({
+                "symbol": item.get("symbol"),
+                "name": item.get("name"),
+                "snapshot_type": snapshot_type,
+                "price": item.get("price", 0),
+                "change_pct": change_pct,
+                "turnover": turnover,
+                "main_net_inflow": proxy_inflow,
+                "capital_inflow": turnover if change_pct >= 0 else 0,
+                "capital_outflow": turnover if change_pct < 0 else 0,
+                "company_count": 0,
+                "leading_stock": "",
+                "leading_stock_change_pct": 0,
+                "heat_score": heat_score,
+                "source": "local_cache",
+                "updated_at": f"{item.get('snapshot_date')} {item.get('snapshot_time') or ''}".strip(),
+            })
+
+        heat_top = sorted(rows, key=lambda item: item.get("heat_score", 0), reverse=True)[:limit]
+        inflow_top = sorted(rows, key=lambda item: item.get("main_net_inflow", 0), reverse=True)[:limit]
+        for idx, row in enumerate(heat_top, start=1):
+            row["heat_rank"] = idx
+        for idx, row in enumerate(inflow_top, start=1):
+            row["inflow_rank"] = idx
+
+        return {
+            "snapshot_type": snapshot_type,
+            "heat_top": heat_top,
+            "inflow_top": inflow_top,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "is_trading_day": trading_day,
+            "board_data_label": latest_label,
+            "market_date_label": "今日交易日" if trading_day else "休市期间，展示最近交易日数据",
+            "source": "local_cache",
+            "warning": warning,
+        }
+    finally:
+        db.close()
+
+
+def get_board_rankings(snapshot_type: str = "sector", limit: int = 20, live: bool = False) -> dict:
+    """Return board heat and capital rankings.
+
+    The default path is a fast local cache so the UI and AI advice are not blocked
+    by slow upstream quote APIs. Pass live=True when an explicit realtime pull is
+    desired.
+    """
+    trading_day = is_trading_day()
+    if not live or not trading_day:
+        return _get_cached_board_rankings(snapshot_type, limit)
+
     _clear_proxy_env()
     import akshare as ak
 
-    trading_day = is_trading_day()
-    latest_label = "交易日" if trading_day else "最近交易日"
+    latest_label = "交易日"
 
     flow_func = ak.stock_fund_flow_concept if snapshot_type == "concept" else ak.stock_fund_flow_industry
-    flow_df = flow_func(symbol="即时")
+    try:
+        flow_df = flow_func(symbol="即时")
+    except Exception as e:
+        logger.warning(f"板块资金流实时获取失败，使用本地缓存: {e}")
+        return _get_cached_board_rankings(snapshot_type, limit, warning=f"实时资金流获取失败，已使用本地缓存: {e}")
     heat_df = None
     try:
         heat_df = ak.stock_board_change_em()
@@ -484,6 +560,9 @@ def get_board_rankings(snapshot_type: str = "sector", limit: int = 20) -> dict:
                 "source": "akshare_live",
                 "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             })
+
+    if not rows:
+        return _get_cached_board_rankings(snapshot_type, limit, warning="实时资金流为空，已使用本地缓存")
 
     heat_top = sorted(rows, key=lambda item: item.get("heat_score", 0), reverse=True)[:limit]
     inflow_top = sorted(rows, key=lambda item: item.get("main_net_inflow", 0), reverse=True)[:limit]

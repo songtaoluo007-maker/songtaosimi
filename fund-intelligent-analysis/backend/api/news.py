@@ -35,7 +35,7 @@ def list_news(
 
 @router.post("/refresh")
 def refresh_news():
-    """立即刷新今日新闻"""
+    """立即刷新财经新闻"""
     from backend.services.news_collector import collect_news
     collect_news()
     return {"message": "新闻刷新已完成"}
