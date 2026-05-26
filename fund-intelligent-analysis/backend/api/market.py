@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, Query
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from backend.database import get_db
 from backend.models.market_snapshot import MarketSnapshot
+from backend.cache import invalidate
 
 router = APIRouter(prefix="/api/market", tags=["行情数据"])
 
@@ -40,12 +42,13 @@ def get_a_share_indices(db: Session = Depends(get_db)):
 
 @router.post("/refresh")
 def refresh_market_data():
-    """手动刷新指数、行业和概念板块行情"""
+    """手动刷新指数、行业和概念板块行情，同时清除缓存确保前端获取最新数据"""
     from backend.services.market_collector import collect_a_share_indices, collect_concepts, collect_sectors
 
     collect_a_share_indices()
     collect_sectors()
     collect_concepts()
+    invalidate("api:")
     return {"message": "行情数据已刷新"}
 
 
@@ -64,7 +67,7 @@ def get_live_board_rankings(
             "snapshot_type": snapshot_type,
             "heat_top": [],
             "inflow_top": [],
-            "updated_at": __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "source": "unavailable",
             "warning": str(e),
         }
@@ -158,7 +161,7 @@ def get_fund_estimate(fund_code: str):
             "last_nav": float(data.get("dwjz", 0)),
         }
     except Exception as e:
-        return {"error": f"获取基金估值失败: {str(e)}", "fund_code": fund_code}
+        raise HTTPException(status_code=502, detail=f"获取基金估值失败: {str(e)}")
 
 
 @router.get("/history/{symbol}")
@@ -226,7 +229,7 @@ def get_market_detail(
             "period": period,
             "rows": rows,
             "latest": rows[-1] if rows else None,
-            "updated_at": __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "source": "online",
         }
     except Exception as e:
@@ -254,7 +257,7 @@ def get_market_detail(
             "period": period,
             "rows": rows,
             "latest": rows[-1] if rows else None,
-            "updated_at": __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "source": "local_snapshot",
             "warning": str(e),
         }

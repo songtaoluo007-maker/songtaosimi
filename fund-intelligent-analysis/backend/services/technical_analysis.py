@@ -1,26 +1,11 @@
 from __future__ import annotations
 
-import os
 import json
 import re
 from datetime import date, datetime, timedelta
 from typing import Any
 
-
-def clear_proxy_env():
-    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]:
-        os.environ.pop(key, None)
-    os.environ["NO_PROXY"] = "*"
-    os.environ["no_proxy"] = "*"
-
-
-def to_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value is None or value == "":
-            return default
-        return float(value)
-    except Exception:
-        return default
+from backend.utils import clear_proxy_env, to_float
 
 
 def ema(values: list[float], span: int) -> list[float]:

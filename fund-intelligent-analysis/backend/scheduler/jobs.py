@@ -72,8 +72,14 @@ def job_calculate_pnl():
     calculate_pnl()
 
 
+def job_snapshot_portfolio_daily():
+    """每日收盘后保存组合市值快照"""
+    from backend.services.return_metrics_v3 import snapshot_portfolio_daily
+    snapshot_portfolio_daily()
+
+
 def job_ai_advice():
-    """尾盘AI建议生成"""
+    """尾盘AI建议生成 + 飞书推送"""
     from backend.services.market_collector import is_trading_day
     if not is_trading_day():
         logger.info("非交易日，跳过AI建议生成")
@@ -86,13 +92,104 @@ def job_ai_advice():
         service = AiAdvisorService(db)
         result = service.generate_close_advice()
         logger.info(f"AI建议生成完成: {result.get('advice_date', 'error')}")
+        if result and not result.get("error"):
+            from backend.services.notification import send_advice_notification
+            send_advice_notification(result)
     except Exception as e:
         logger.error(f"AI建议生成失败: {e}")
     finally:
         db.close()
 
 
-def job_update_holdings_nav():
-    """更新持仓净值+市值"""
-    from backend.services.fund_nav_collector import collect_fund_nav
-    collect_fund_nav()
+def job_collect_capital_flows():
+    """采集机构/主力资金流向"""
+    try:
+        from backend.services.capital_flow_collector import collect_all_capital_flows
+        collect_all_capital_flows()
+    except Exception as e:
+        logger.warning(f"资金流向采集任务失败: {e}")
+
+
+def job_advice_review():
+    """AI建议复盘 — 对够天数的未复盘建议批量生成复盘"""
+    try:
+        from backend.database import SessionLocal
+        from backend.services.advice_review_service import batch_review_pending
+
+        db = SessionLocal()
+        try:
+            result = batch_review_pending(db)
+            if result["reviewed"] > 0:
+                logger.info(f"AI建议复盘完成: 新增{result['reviewed']}条, 跳过{result['skipped']}条")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"AI建议复盘任务失败: {e}")
+
+
+def job_sync_fund_managers():
+    """P0.2 — 基金经理变更检测（每周日 20:00 跑，高优先级走飞书推送）"""
+    try:
+        from backend.database import SessionLocal
+        from backend.services.fund_manager_service_v3 import sync_all_holding_managers
+
+        db = SessionLocal()
+        try:
+            result = sync_all_holding_managers(db)
+            logger.info(
+                f"基金经理同步完成: checked={result.get('checked', 0)} "
+                f"high_alerts={result.get('high_alerts_count', 0)} "
+                f"skipped={len(result.get('skipped', []))}"
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"基金经理同步任务失败: {e}")
+
+
+def job_check_investment_plans():
+    """P1.1 — 定投到期检查（每个交易日 09:00 跑，触发飞书提醒）"""
+    try:
+        from backend.database import SessionLocal
+        from backend.services.investment_plan_service_v3 import daily_check_and_alert
+
+        db = SessionLocal()
+        try:
+            result = daily_check_and_alert(db)
+            if result.get("checked", 0) > 0:
+                logger.info(
+                    f"定投到期检查: 今日到期 {result['checked']} 笔，"
+                    f"飞书推送 {'成功' if result['notified'] else '跳过'}"
+                )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"定投到期检查任务失败: {e}")
+
+
+def job_sync_fund_top_holdings():
+    """P0.3 — 基金前十大持股采集（季报披露后跑）
+
+    触发节奏：每月 5 号 21:00（覆盖 4/8/10/次年 1 月的季报披露窗口）
+    """
+    try:
+        from datetime import date
+        from backend.database import SessionLocal
+        from backend.services.fund_top_holdings_collector_v3 import sync_all_holding_top_holdings
+
+        # 只在季报披露月份的月初跑（节省 AKShare 调用）
+        if date.today().month not in {1, 4, 5, 8, 9, 10, 11}:
+            logger.info("非季报披露月，跳过基金持股采集")
+            return
+
+        db = SessionLocal()
+        try:
+            result = sync_all_holding_top_holdings(db)
+            logger.info(
+                f"基金持股采集完成: success={len(result.get('success', []))} "
+                f"failed={len(result.get('failed', []))}"
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"基金持股采集任务失败: {e}")

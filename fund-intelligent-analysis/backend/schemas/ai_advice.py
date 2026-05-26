@@ -17,4 +17,4 @@ class AiAdviceResponse(BaseModel):
     token_usage: int = 0
     is_read: bool = False
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}

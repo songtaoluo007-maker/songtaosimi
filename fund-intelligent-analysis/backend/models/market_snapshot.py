@@ -19,6 +19,7 @@ class MarketSnapshot(Base):
     __tablename__ = "market_snapshots"
     __table_args__ = (
         Index("ix_snapshot_symbol_date_type", "symbol", "snapshot_date", "snapshot_type"),
+        Index("idx_snapshot_type_date", "snapshot_type", "snapshot_date"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)

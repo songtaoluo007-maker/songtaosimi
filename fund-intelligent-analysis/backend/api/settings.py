@@ -12,7 +12,7 @@ def get_settings():
     return {
         "deepseek_model": settings.DEEPSEEK_MODEL,
         "deepseek_base_url": settings.DEEPSEEK_BASE_URL,
-        "has_api_key": bool(settings.DEEPSEEK_API_KEY and settings.DEEPSEEK_API_KEY != "your_deepseek_api_key_here"),
+        "has_api_key": settings.has_api_key,
         "market_collect_interval": settings.MARKET_COLLECT_INTERVAL_MINUTES,
         "fund_estimate_interval": settings.FUND_ESTIMATE_INTERVAL_MINUTES,
         "ai_advice_time": f"{settings.AI_ADVICE_HOUR:02d}:{settings.AI_ADVICE_MINUTE:02d}",

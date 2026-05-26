@@ -1,4 +1,6 @@
 data/
+!data/calendar.json
+!data/market_holidays.json
 *.db
 __pycache__/
 *.pyc

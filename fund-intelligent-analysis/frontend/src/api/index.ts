@@ -1,5 +1,14 @@
 import request from './request'
 
+// 本地账号
+export const getBootstrapStatus = () => request.get('/auth/bootstrap-status')
+export const setupOwner = (data: any) => request.post('/auth/setup', data)
+export const login = (data: any) => request.post('/auth/login', data)
+export const getCurrentUser = () => request.get('/auth/me')
+export const changePassword = (data: any) => request.post('/auth/change-password', data)
+export const refreshAuthToken = (refreshToken: string) => request.post('/auth/refresh', null, { headers: { 'X-Refresh-Token': refreshToken } })
+export const recoverPassword = (data: any) => request.post('/auth/recover', data)
+
 // 基金管理
 export const getFunds = (params?: any) => request.get('/funds', { params })
 export const getFund = (code: string) => request.get(`/funds/${code}`)
@@ -15,6 +24,50 @@ export const getHoldings = (params?: any) => request.get('/holdings', { params }
 export const getHoldingsSummary = () => request.get('/holdings/summary')
 export const refreshHoldingEstimates = () => request.post('/holdings/refresh-estimates')
 export const getHoldingPerformance = () => request.get('/holdings/performance')
+export const getHoldingPerformanceCalendar = (params?: any) => request.get('/holdings/performance-calendar', { params })
+export const getHoldingXirrMetrics = () => request.get('/holdings/metrics/xirr')
+export const getHoldingDrawdownMetrics = () => request.get('/holdings/metrics/drawdown')
+export const getHoldingBenchmarkCompare = () => request.get('/holdings/metrics/benchmark-compare')
+
+// P0.2 — 基金经理 + 预警
+export const getFundManagers = (code: string) => request.get(`/funds/${code}/managers`)
+export const syncFundManagers = (code: string) => request.post(`/funds/${code}/managers/sync`)
+export const syncAllManagers = () => request.post('/manager-alerts/sync-all', {}, { timeout: 180000 })
+export const getManagerAlerts = (onlyUnread = true, limit = 50) =>
+  request.get('/manager-alerts', { params: { only_unread: onlyUnread, limit } })
+export const markManagerAlertRead = (id: number) => request.put(`/manager-alerts/${id}/read`)
+
+// P0.3 — 持仓重叠度
+export const getOverlapReport = () => request.get('/risk-exposure/overlap')
+export const syncOverlapHoldings = () => request.post('/risk-exposure/overlap/sync', {}, { timeout: 300000 })
+export const syncOverlapSingle = (code: string) => request.post(`/risk-exposure/overlap/sync/${code}`, {}, { timeout: 60000 })
+
+// P1.3 — 用户画像
+export const getUserProfile = () => request.get('/user/profile')
+export const saveUserProfile = (data: any) => request.put('/user/profile', data)
+export const recommendAllocation = () => request.post('/user/profile/recommend-allocation')
+
+// P1.2 — 资产配置目标
+export const getAllocationTargets = () => request.get('/asset-allocation/targets')
+export const saveAllocationTargets = (items: any[]) => request.put('/asset-allocation/targets', items)
+export const resetAllocationTargets = () => request.delete('/asset-allocation/targets')
+export const getCurrentAllocation = () => request.get('/asset-allocation/current')
+export const getAllocationDeviations = (persist = false) =>
+  request.get('/asset-allocation/deviations', { params: { persist } })
+export const getRebalanceAlerts = (onlyUnack = true) =>
+  request.get('/asset-allocation/alerts', { params: { only_unack: onlyUnack } })
+export const ackRebalanceAlert = (id: number) => request.put(`/asset-allocation/alerts/${id}/ack`)
+
+// P1.1 — 定投计划
+export const getInvestmentPlans = (activeOnly = true) =>
+  request.get('/investment-plans', { params: { active_only: activeOnly } })
+export const createInvestmentPlan = (data: any) => request.post('/investment-plans', data)
+export const updateInvestmentPlan = (id: number, data: any) => request.put(`/investment-plans/${id}`, data)
+export const deactivateInvestmentPlan = (id: number) => request.delete(`/investment-plans/${id}`)
+export const getUpcomingInvestments = (daysAhead = 7) =>
+  request.get('/investment-plans/upcoming', { params: { days_ahead: daysAhead } })
+export const getInvestmentSmileCurve = (id: number) => request.get(`/investment-plans/${id}/smile-curve`)
+export const reconcileInvestmentPlan = (id: number) => request.post(`/investment-plans/${id}/reconcile`)
 export const addHolding = (data: any) => request.post('/holdings', data)
 export const updateHolding = (code: string, data: any) => request.put(`/holdings/${code}`, data)
 export const deleteHolding = (code: string) => request.delete(`/holdings/${code}`)
@@ -29,6 +82,8 @@ export const deleteGroup = (id: number, deleteHoldings = false) => request.delet
 // 交易记录
 export const getTrades = (params?: any) => request.get('/trades', { params })
 export const addTrade = (data: any) => request.post('/trades', data)
+export const updateTrade = (id: number, data: any) => request.put(`/trades/${id}`, data)
+export const deleteTrade = (id: number) => request.delete(`/trades/${id}`)
 export const getTradeStats = () => request.get('/trades/stats')
 
 // 行情数据
@@ -44,13 +99,20 @@ export const getMarketDetail = (symbol: string, params?: any) => request.get(`/m
 
 // 新闻
 export const getNews = (params?: any) => request.get('/news', { params })
+export const getNewsInsights = () => request.get('/news/insights/summary')
+export const getNewsImpact = (newsId: number) => request.get(`/news/impact/${newsId}`)
+export const getDailyImpactReport = () => request.get('/news/impact/daily')
+export const classifyExistingNews = () => request.post('/news/classify-existing', {}, { timeout: 120000 })
 export const refreshNews = () => request.post('/news/refresh', {}, { timeout: 120000 })
 
 // AI建议
 export const getAiAdvices = (limit = 30) => request.get('/ai/advice', { params: { limit } })
 export const getLatestAdvice = () => request.get('/ai/advice/latest')
-export const generateAdvice = () => request.post('/ai/advice/generate', {}, { timeout: 300000 })
+export const generateAdvice = (refresh = false) =>
+  request.post('/ai/advice/generate-async', {}, { params: { refresh }, timeout: 30000 })
+export const getAdviceGenerationStatus = () => request.get('/ai/advice/generate/status')
 export const markAdviceRead = (id: number) => request.put(`/ai/advice/${id}/read`)
+export const sendLatestToFeishu = () => request.post('/ai/notify/send-latest')
 
 // OCR
 export const uploadOcr = (formData: FormData, source: string) => {

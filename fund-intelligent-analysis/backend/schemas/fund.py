@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from typing import Optional
 from datetime import date
 
@@ -28,7 +28,11 @@ class FundResponse(BaseModel):
     fund_name: str
     fund_type: str
     latest_nav: float = 0
-    latest_nav_date: Optional[str] = None
+    latest_nav_date: Optional[date] = None
     acc_nav: float = 0
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("latest_nav_date")
+    def serialize_date(self, value: date | None) -> str | None:
+        return value.isoformat() if value else None

@@ -1,24 +1,22 @@
 """
 盈亏计算服务
 """
-from datetime import date
+from sqlalchemy.orm import joinedload
 from loguru import logger
 
 from backend.database import SessionLocal
 from backend.models.holding import Holding
-from backend.models.fund import Fund
 
 
-def calculate_pnl():
+def calculate_pnl() -> None:
     """重算所有活跃持仓的盈亏"""
     db = SessionLocal()
     try:
-        holdings = db.query(Holding).filter(Holding.is_active == True).all()
+        holdings = db.query(Holding).options(joinedload(Holding.fund)).filter(Holding.is_active == True).all()
         count = 0
 
         for h in holdings:
-            # 获取最新净值
-            fund = db.query(Fund).filter(Fund.fund_code == h.fund_code).first()
+            fund = h.fund
             if fund and fund.latest_nav:
                 h.current_nav = fund.latest_nav
 

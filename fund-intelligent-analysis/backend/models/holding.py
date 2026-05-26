@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, Date, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Numeric, Boolean, Date, DateTime, ForeignKey, Index, func
 from sqlalchemy.orm import relationship
 from backend.database import Base
 
 
 class Holding(Base):
     __tablename__ = "holdings"
+    __table_args__ = (
+        Index("idx_holdings_active", "is_active", "fund_code"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     fund_code = Column(String(6), ForeignKey("funds.fund_code"), nullable=False, index=True)
@@ -18,6 +21,10 @@ class Holding(Base):
     daily_pnl_date = Column(Date, nullable=True)  # 当日盈亏对应日期
     pnl_amount = Column(Numeric(16, 2), default=0)  # 浮动盈亏金额
     pnl_ratio = Column(Numeric(8, 4), default=0)  # 浮动盈亏比例
+    xirr = Column(Numeric(8, 4), nullable=True)  # 持有期现金流加权年化收益率
+    max_drawdown = Column(Numeric(8, 4), nullable=True)  # 最大回撤
+    max_drawdown_date = Column(Date, nullable=True)  # 最大回撤谷底日期
+    recovery_days = Column(Integer, nullable=True)  # 最大回撤恢复天数
     source = Column(String(20), default="manual")  # manual/ocr_alipay/ocr_tiantian
     is_active = Column(Boolean, default=True)  # 是否持有中
     created_at = Column(DateTime, server_default=func.now())
@@ -40,6 +47,10 @@ class Holding(Base):
             "daily_pnl_date": self.daily_pnl_date.isoformat() if self.daily_pnl_date else "",
             "pnl_amount": float(self.pnl_amount) if self.pnl_amount is not None else 0.0,
             "pnl_ratio": float(self.pnl_ratio) if self.pnl_ratio is not None else 0.0,
+            "xirr": float(self.xirr) if self.xirr is not None else None,
+            "max_drawdown": float(self.max_drawdown) if self.max_drawdown is not None else None,
+            "max_drawdown_date": self.max_drawdown_date.isoformat() if self.max_drawdown_date else "",
+            "recovery_days": int(self.recovery_days) if self.recovery_days is not None else None,
             "source": self.source or "manual",
             "is_active": self.is_active,
             "fund_name": self.fund.fund_name if self.fund else "",

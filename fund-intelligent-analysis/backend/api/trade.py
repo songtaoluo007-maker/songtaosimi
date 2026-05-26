@@ -74,18 +74,47 @@ def create_trade(data: TradeCreate, db: Session = Depends(get_db)):
             db.add(holding)
     elif data.trade_type == "卖出":
         if holding:
-            remaining_shares = float(holding.shares or 0) - data.shares
-            if remaining_shares <= 0:
+            current_shares = float(holding.shares or 0)
+            if current_shares <= 0:
                 holding.is_active = False
                 holding.shares = 0
             else:
-                ratio = data.shares / float(holding.shares or 1)
-                holding.shares = remaining_shares
-                holding.cost_amount = float(holding.cost_amount or 0) * (1 - ratio)
+                remaining_shares = current_shares - data.shares
+                if remaining_shares <= 0:
+                    holding.is_active = False
+                    holding.shares = 0
+                else:
+                    ratio = data.shares / current_shares
+                    holding.shares = remaining_shares
+                    holding.cost_amount = float(holding.cost_amount or 0) * (1 - ratio)
 
     db.commit()
     db.refresh(trade)
     return trade.to_dict()
+
+
+@router.put("/{trade_id}")
+def update_trade(trade_id: int, data: TradeCreate, db: Session = Depends(get_db)):
+    """编辑交易记录。只更新记录本身，持仓可通过持仓刷新/手动调整校准。"""
+    trade = db.query(Trade).filter(Trade.id == trade_id).first()
+    if not trade:
+        raise HTTPException(status_code=404, detail="交易记录不存在")
+    for key, value in data.model_dump().items():
+        setattr(trade, key, value)
+    db.commit()
+    db.refresh(trade)
+    return trade.to_dict()
+
+
+@router.delete("/{trade_id}")
+def delete_trade(trade_id: int, db: Session = Depends(get_db)):
+    """删除交易记录。"""
+    trade = db.query(Trade).filter(Trade.id == trade_id).first()
+    if not trade:
+        raise HTTPException(status_code=404, detail="交易记录不存在")
+    db.delete(trade)
+    db.commit()
+    return {"message": "交易记录已删除"}
 
 
 @router.get("/stats")
