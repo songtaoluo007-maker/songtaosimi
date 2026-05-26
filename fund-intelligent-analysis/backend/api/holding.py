@@ -1,11 +1,125 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from datetime import date, datetime, timedelta
+from calendar import monthrange
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from backend.database import get_db
 from backend.models.holding import Holding
 from backend.models.fund import Fund
 from backend.schemas.holding import HoldingCreate, HoldingUpdate, HoldingResponse, HoldingSummary
 from backend.services.fund_nav_collector import fetch_fund_info, fetch_latest_nav
+from backend.utils import to_float as _float
+
+
+def _date_range(start: date, end: date) -> list[date]:
+    days = []
+    cursor = start
+    while cursor <= end:
+        days.append(cursor)
+        cursor += timedelta(days=1)
+    return days
+
+
+def _resolve_period_range(period: str, anchor: date, db: Session) -> tuple[date, date, str]:
+    period = (period or "month").lower()
+    if period == "day":
+        return anchor, anchor, "当日"
+    if period == "week":
+        start = anchor - timedelta(days=anchor.weekday())
+        return start, start + timedelta(days=6), "当周"
+    if period == "year":
+        return date(anchor.year, 1, 1), date(anchor.year, 12, 31), "当年"
+    if period == "inception":
+        starts = []
+        first_holding = db.query(Holding).filter(Holding.is_active == True).order_by(Holding.created_at.asc()).first()
+        if first_holding and first_holding.created_at:
+            starts.append(first_holding.created_at.date())
+        from backend.models.trade import Trade
+        from backend.models.market_snapshot import MarketSnapshot
+
+        first_trade = db.query(Trade).order_by(Trade.trade_date.asc()).first()
+        if first_trade and first_trade.trade_date:
+            starts.append(first_trade.trade_date)
+        first_snapshot = db.query(MarketSnapshot).filter(
+            MarketSnapshot.snapshot_type == "fund",
+        ).order_by(MarketSnapshot.snapshot_date.asc()).first()
+        if first_snapshot and first_snapshot.snapshot_date:
+            starts.append(first_snapshot.snapshot_date)
+        start = min(starts) if starts else date(anchor.year, 1, 1)
+        return start, anchor, "开户以来"
+    last_day = monthrange(anchor.year, anchor.month)[1]
+    return date(anchor.year, anchor.month, 1), date(anchor.year, anchor.month, last_day), "当月"
+
+
+def _snapshot_maps(db: Session, fund_codes: list[str], start: date, end: date):
+    from backend.models.market_snapshot import MarketSnapshot
+
+    symbols = [f"fund_{code}" for code in fund_codes]
+    if not symbols:
+        return {}, {}
+    snapshots = db.query(MarketSnapshot).filter(
+        MarketSnapshot.snapshot_type == "fund",
+        MarketSnapshot.symbol.in_(symbols),
+        MarketSnapshot.snapshot_date >= start - timedelta(days=10),
+        MarketSnapshot.snapshot_date <= end,
+    ).order_by(MarketSnapshot.symbol.asc(), MarketSnapshot.snapshot_date.asc(), MarketSnapshot.snapshot_time.asc()).all()
+
+    latest_by_day = {}
+    by_symbol_dates: dict[str, list[tuple[date, MarketSnapshot]]] = {}
+    for snap in snapshots:
+        code = str(snap.symbol).replace("fund_", "")
+        latest_by_day[(code, snap.snapshot_date)] = snap
+        by_symbol_dates.setdefault(code, [])
+        if not by_symbol_dates[code] or by_symbol_dates[code][-1][0] != snap.snapshot_date:
+            by_symbol_dates[code].append((snap.snapshot_date, snap))
+        else:
+            by_symbol_dates[code][-1] = (snap.snapshot_date, snap)
+    return latest_by_day, by_symbol_dates
+
+
+def _latest_before(by_symbol_dates: dict, code: str, target: date, include_target: bool = True):
+    selected = None
+    for row_date, snap in by_symbol_dates.get(code, []):
+        if row_date < target or (include_target and row_date == target):
+            selected = snap
+        if row_date > target:
+            break
+    return selected
+
+
+def _benchmark_daily_map(db: Session, start: date, end: date):
+    from backend.models.market_snapshot import MarketSnapshot
+
+    snapshots = db.query(MarketSnapshot).filter(
+        MarketSnapshot.symbol == "000300.SH",
+        MarketSnapshot.snapshot_type == "index",
+        MarketSnapshot.snapshot_date >= start - timedelta(days=10),
+        MarketSnapshot.snapshot_date <= end,
+    ).order_by(MarketSnapshot.snapshot_date.asc(), MarketSnapshot.snapshot_time.asc()).all()
+    by_day = {}
+    for snap in snapshots:
+        by_day[snap.snapshot_date] = snap
+    rows = sorted(by_day.items(), key=lambda item: item[0])
+
+    def before(target: date, include_target: bool = True):
+        selected = None
+        for row_date, snap in rows:
+            if row_date < target or (include_target and row_date == target):
+                selected = snap
+            if row_date > target:
+                break
+        return selected
+
+    result = {}
+    for day in _date_range(start, end):
+        current = before(day, True)
+        prev = before(day, False)
+        if current and prev and _float(prev.price) > 0:
+            result[day] = (_float(current.price) - _float(prev.price)) / _float(prev.price) * 100
+        elif current:
+            result[day] = _float(current.change_pct)
+    return result, before
 
 router = APIRouter(prefix="/api/holdings", tags=["持仓管理"])
 
@@ -13,7 +127,7 @@ router = APIRouter(prefix="/api/holdings", tags=["持仓管理"])
 @router.get("")
 def list_holdings(is_active: Optional[bool] = True, db: Session = Depends(get_db)):
     """获取当前持仓列表"""
-    query = db.query(Holding).filter(Holding.is_active == is_active)
+    query = db.query(Holding).options(joinedload(Holding.fund)).filter(Holding.is_active == is_active)
     holdings = query.all()
     result = []
     for h in holdings:
@@ -25,7 +139,7 @@ def list_holdings(is_active: Optional[bool] = True, db: Session = Depends(get_db
 @router.get("/summary")
 def get_holdings_summary(db: Session = Depends(get_db)):
     """持仓汇总统计"""
-    holdings = db.query(Holding).filter(Holding.is_active == True).all()
+    holdings = db.query(Holding).options(joinedload(Holding.fund)).filter(Holding.is_active == True).all()
 
     total_value = sum(float(h.current_value or 0) for h in holdings)
     total_cost = sum(float(h.cost_amount or 0) for h in holdings)
@@ -74,7 +188,7 @@ def get_holding_performance(db: Session = Depends(get_db)):
     from datetime import date, datetime, timedelta
     from backend.models.market_snapshot import MarketSnapshot
 
-    holdings = db.query(Holding).filter(Holding.is_active == True).all()
+    holdings = db.query(Holding).options(joinedload(Holding.fund)).filter(Holding.is_active == True).all()
     total_value = sum(float(h.current_value or 0) for h in holdings)
     total_cost = sum(float(h.cost_amount or 0) for h in holdings)
     total_pnl = total_value - total_cost
@@ -109,12 +223,22 @@ def get_holding_performance(db: Session = Depends(get_db)):
                 by_symbol = {}
                 for s in sorted(fund_snaps, key=lambda x: (x.symbol, x.snapshot_date, x.snapshot_time)):
                     by_symbol.setdefault(s.symbol, []).append(float(s.price or 0))
+                # 按持仓市值加权的组合收益率
                 changes = []
-                for vals in by_symbol.values():
+                change_map = {}  # fund_code -> return%
+                for symbol, vals in by_symbol.items():
+                    fund_code = symbol.replace("fund_", "")
                     if len(vals) >= 2 and vals[0]:
-                        changes.append((vals[-1] - vals[0]) / vals[0] * 100)
-                if changes:
-                    portfolio_return = sum(changes) / len(changes)
+                        change_map[fund_code] = (vals[-1] - vals[0]) / vals[0] * 100
+                if change_map:
+                    total_value = sum(float(h.current_value or 0) for h in holdings if h.fund_code in change_map)
+                    if total_value > 0:
+                        portfolio_return = sum(
+                            change_map.get(h.fund_code, 0) * float(h.current_value or 0) / total_value
+                            for h in holdings
+                        )
+                    else:
+                        portfolio_return = sum(change_map.values()) / len(change_map)
             idx_start = db.query(MarketSnapshot).filter(
                 MarketSnapshot.symbol == "000300.SH",
                 MarketSnapshot.snapshot_date >= start,
@@ -130,6 +254,138 @@ def get_holding_performance(db: Session = Depends(get_db)):
             "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         })
     return rows
+
+
+@router.get("/performance-calendar")
+def get_holding_performance_calendar(
+    period: str = Query("month", pattern="^(day|week|month|year|inception)$"),
+    target_date: Optional[date] = Query(None, alias="date"),
+    db: Session = Depends(get_db),
+):
+    """收益日历：按日沉淀组合盈亏、贡献基金和沪深300对比。
+
+    口径说明：优先使用本地基金实时估值快照计算日收益；没有快照的日期保留空值，
+    当前日会回退到 holdings.daily_pnl，避免休市或上游接口失败时页面完全空白。
+    """
+    anchor = target_date or date.today()
+    start, end, label = _resolve_period_range(period, anchor, db)
+    today = date.today()
+    if end > today:
+        end = today
+    if start > end:
+        start = end
+
+    holdings = db.query(Holding).options(joinedload(Holding.fund)).filter(Holding.is_active == True).all()
+    fund_codes = [h.fund_code for h in holdings]
+    latest_by_day, by_symbol_dates = _snapshot_maps(db, fund_codes, start, end)
+    benchmark_daily, benchmark_before = _benchmark_daily_map(db, start, end)
+
+    days = []
+    all_contributions = {}
+    for day in _date_range(start, end):
+        contributions = []
+        total_value = 0.0
+        daily_pnl = 0.0
+        has_market_data = False
+
+        for h in holdings:
+            code = h.fund_code
+            shares = _float(h.shares)
+            snap = latest_by_day.get((code, day))
+            prev = _latest_before(by_symbol_dates, code, day, include_target=False)
+            price = _float(snap.price) if snap else None
+            pnl = None
+            return_pct = None
+
+            if snap:
+                has_market_data = True
+                total_value += shares * _float(snap.price)
+            if snap and prev and _float(prev.price) > 0:
+                pnl = shares * (_float(snap.price) - _float(prev.price))
+                return_pct = (_float(snap.price) - _float(prev.price)) / _float(prev.price) * 100
+            elif h.daily_pnl_date == day:
+                pnl = _float(h.daily_pnl)
+                return_pct = _float(h.daily_pnl_ratio)
+                price = _float(h.current_nav)
+                total_value += _float(h.current_value)
+                has_market_data = True
+
+            if pnl is not None:
+                daily_pnl += pnl
+                contributions.append({
+                    "fund_code": code,
+                    "fund_name": h.fund.fund_name if h.fund else "",
+                    "daily_pnl": round(pnl, 2),
+                    "daily_return": round(return_pct or 0, 2),
+                    "price": round(price or 0, 4),
+                    "weight": round((_float(h.current_value) / sum(_float(x.current_value) for x in holdings) * 100) if holdings and sum(_float(x.current_value) for x in holdings) else 0, 2),
+                })
+
+        base_value = total_value - daily_pnl
+        daily_return = daily_pnl / base_value * 100 if base_value > 0 else 0
+        benchmark_return = benchmark_daily.get(day)
+        day_status = "trading" if has_market_data else ("rest" if day.weekday() >= 5 else "no_data")
+        contributions.sort(key=lambda item: item["daily_pnl"], reverse=True)
+        row = {
+            "date": day.isoformat(),
+            "weekday": day.weekday(),
+            "status": day_status,
+            "daily_pnl": round(daily_pnl, 2) if has_market_data else None,
+            "daily_return": round(daily_return, 2) if has_market_data else None,
+            "benchmark_return": round(benchmark_return, 2) if benchmark_return is not None else None,
+            "excess_return": round(daily_return - benchmark_return, 2) if has_market_data and benchmark_return is not None else None,
+            "total_value": round(total_value, 2) if total_value else None,
+            "top_gain": contributions[0] if contributions else None,
+            "top_loss": contributions[-1] if contributions else None,
+        }
+        days.append(row)
+        all_contributions[day.isoformat()] = contributions
+
+    active_days = [d for d in days if d["daily_pnl"] is not None]
+    total_pnl = sum(_float(d["daily_pnl"]) for d in active_days)
+    win_days = len([d for d in active_days if _float(d["daily_pnl"]) > 0])
+    loss_days = len([d for d in active_days if _float(d["daily_pnl"]) < 0])
+    current_total_value = sum(_float(h.current_value) for h in holdings)
+    cost_base = current_total_value - total_pnl
+    period_return = total_pnl / cost_base * 100 if cost_base > 0 else 0
+
+    start_bench = benchmark_before(start, True)
+    end_bench = benchmark_before(end, True)
+    benchmark_period_return = 0.0
+    if start_bench and end_bench and _float(start_bench.price) > 0:
+        benchmark_period_return = (_float(end_bench.price) - _float(start_bench.price)) / _float(start_bench.price) * 100
+
+    selected_key = anchor.isoformat()
+    if selected_key not in all_contributions and active_days:
+        selected_key = active_days[-1]["date"]
+    selected_day = next((d for d in days if d["date"] == selected_key), None)
+    selected_contributions = all_contributions.get(selected_key, [])
+    selected_contributions.sort(key=lambda item: item["daily_pnl"], reverse=True)
+
+    return {
+        "period": period,
+        "label": label,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "selected_date": selected_key,
+        "summary": {
+            "total_pnl": round(total_pnl, 2),
+            "period_return": round(period_return, 2),
+            "benchmark_return": round(benchmark_period_return, 2),
+            "excess_return": round(period_return - benchmark_period_return, 2),
+            "win_days": win_days,
+            "loss_days": loss_days,
+            "active_days": len(active_days),
+            "max_daily_gain": max((_float(d["daily_pnl"]) for d in active_days), default=0),
+            "max_daily_loss": min((_float(d["daily_pnl"]) for d in active_days), default=0),
+            "win_rate": round(win_days / len(active_days) * 100, 2) if active_days else 0,
+        },
+        "days": days,
+        "selected_day": selected_day,
+        "selected_contributions": selected_contributions,
+        "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "data_note": "优先使用本地实时估值快照；缺失日期显示为空，当前日可回退到持仓当日盈亏。",
+    }
 
 
 @router.post("")

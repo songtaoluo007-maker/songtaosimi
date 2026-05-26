@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short --strict-markers"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["backend/tests/*", "backend/alembic/*"]
+
+[tool.coverage.report]
+fail_under = 0
+show_missing = true

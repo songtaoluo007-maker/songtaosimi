@@ -1,0 +1,233 @@
+/*
+ * Google Design Tokens
+ * Clean, airy, content-first
+ */
+
+:root {
+  /* ── Brand: Google Blue ──────────────────── */
+  --brand-50:  #e8f0fe;
+  --brand-100: #d2e3fc;
+  --brand-200: #a8c7fa;
+  --brand-300: #7baaf7;
+  --brand-400: #4d8df4;
+  --brand-500: #1a73e8;   /* Google Blue */
+  --brand-600: #1669d0;
+  --brand-700: #1258b4;
+  --brand-800: #0e4798;
+  --brand-900: #0a367c;
+
+  /* ── Neutrals ────────────────────────────── */
+  --gray-50:  #ffffff;
+  --gray-100: #f8f9fa;
+  --gray-200: #f1f3f4;
+  --gray-300: #e8eaed;
+  --gray-400: #dadce0;
+  --gray-500: #9aa0a6;
+  --gray-600: #80868b;
+  --gray-700: #5f6368;
+  --gray-800: #3c4043;
+  --gray-900: #202124;
+  --gray-950: #17181b;
+
+  /* ── Semantic ────────────────────────────── */
+  --success-50:  #e6f4ea;
+  --success-100: #ceead6;
+  --success-200: #a1d8b0;
+  --success-300: #7bc68e;
+  --success-400: #5bb974;
+  --success-500: #34a853;   /* Google Green */
+  --success-600: #1e8e3e;
+  --success-700: #188038;
+  --success-800: #0d652d;
+  --success-900: #0a4a20;
+
+  --danger-50:  #fce8e6;
+  --danger-100: #f8d2ce;
+  --danger-200: #f1a9a1;
+  --danger-300: #ea8377;
+  --danger-400: #e45d4d;
+  --danger-500: #ea4335;   /* Google Red */
+  --danger-600: #d33426;
+  --danger-700: #b72818;
+  --danger-800: #9a1d10;
+  --danger-900: #7d1409;
+
+  --warning-50:  #fef7e0;
+  --warning-100: #feefc3;
+  --warning-200: #fde08a;
+  --warning-300: #fcd152;
+  --warning-400: #fbc21a;
+  --warning-500: #fbbc04;   /* Google Yellow */
+  --warning-600: #f9ab00;
+  --warning-700: #e69100;
+  --warning-800: #c27a00;
+  --warning-900: #9e6200;
+
+  --info-50:  #e8f0fe;
+  --info-100: #d2e3fc;
+  --info-200: #a8c7fa;
+  --info-300: #7baaf7;
+  --info-400: #4d8df4;
+  --info-500: #1a73e8;
+  --info-600: #1669d0;
+  --info-700: #1258b4;
+  --info-800: #0e4798;
+  --info-900: #0a367c;
+
+  /* ── Typography ──────────────────────────── */
+  --font-sans: "Google Sans", "Product Sans", "PingFang SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Google Sans Mono", "SF Mono", "Cascadia Code", "Consolas", "Courier New", monospace;
+
+  --text-xs:    0.72rem;
+  --text-sm:    0.8rem;
+  --text-base:  0.875rem;
+  --text-lg:    1rem;
+  --text-xl:    1.125rem;
+  --text-2xl:   1.375rem;
+  --text-3xl:   1.75rem;
+  --text-4xl:   2.25rem;
+  --text-5xl:   3rem;
+
+  --leading-tight:  1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.625;
+
+  --weight-normal:  400;
+  --weight-medium:  500;
+  --weight-semibold:600;
+  --weight-bold:    700;
+
+  /* ── Spacing ─────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-7:  28px;
+  --space-8:  32px;
+  --space-9:  40px;
+  --space-10: 48px;
+  --space-11: 56px;
+  --space-12: 72px;
+
+  /* ── Radius — Google uses pill shapes ────── */
+  --radius-none: 0;
+  --radius-xs:  4px;
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows — Material elevation ────────── */
+  --shadow-none: none;
+  --shadow-xs:  0 1px 2px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-md:  0 2px 6px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.06);
+  --shadow-lg:  0 4px 12px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-xl:  0 8px 24px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06);
+
+  /* ── Transitions ──────────────────────────── */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ── Layout ──────────────────────────────── */
+  --sidebar-width: 240px;
+  --sidebar-bg: #f8f9fa;
+  --sidebar-hover: rgba(26,115,232,0.06);
+  --sidebar-active: rgba(26,115,232,0.1);
+  --sidebar-text: #5f6368;
+  --sidebar-text-active: #1a73e8;
+  --sidebar-border: #e8eaed;
+
+  --page-bg: #ffffff;
+  --content-max-width: 1320px;
+  --header-height: 52px;
+
+  /* ── Element Plus ────────────────────────── */
+  --el-color-primary: #1a73e8;
+  --el-color-primary-light-3: #4d8df4;
+  --el-color-primary-light-5: #7baaf7;
+  --el-color-primary-light-7: #a8c7fa;
+  --el-color-primary-light-8: #c4dafc;
+  --el-color-primary-light-9: #dce8fd;
+  --el-color-primary-dark-2: #1669d0;
+
+  --el-color-success: #34a853;
+  --el-color-warning: #fbbc04;
+  --el-color-danger: #ea4335;
+  --el-color-error: #ea4335;
+  --el-color-info: #1a73e8;
+
+  --el-bg-color: #ffffff;
+  --el-bg-color-page: #ffffff;
+  --el-bg-color-overlay: #ffffff;
+
+  --el-text-color-primary: #202124;
+  --el-text-color-regular: #3c4043;
+  --el-text-color-secondary: #5f6368;
+  --el-text-color-placeholder: #80868b;
+  --el-text-color-disabled: #9aa0a6;
+
+  --el-border-color: #e8eaed;
+  --el-border-color-light: #f1f3f4;
+  --el-border-color-lighter: #f8f9fa;
+  --el-border-color-extra-light: #ffffff;
+  --el-border-color-dark: #dadce0;
+
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 20px;
+  --el-border-radius-circle: 100%;
+
+  --el-box-shadow-light: 0 1px 3px rgba(0,0,0,0.08);
+  --el-box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  --el-box-shadow-dark: 0 4px 12px rgba(0,0,0,0.1);
+
+  --el-font-size-extra-large: 1.375rem;
+  --el-font-size-large: 1.125rem;
+  --el-font-size-medium: 1rem;
+  --el-font-size-base: 0.875rem;
+  --el-font-size-small: 0.8rem;
+  --el-font-size-extra-small: 0.72rem;
+
+  --el-font-family: var(--font-sans);
+
+  --el-table-bg-color: #ffffff;
+  --el-table-tr-bg-color: #ffffff;
+  --el-table-header-bg-color: #f8f9fa;
+  --el-table-row-hover-bg-color: #e8f0fe;
+  --el-table-border-color: #e8eaed;
+  --el-table-text-color: #202124;
+  --el-table-header-text-color: #5f6368;
+  --el-table-current-row-bg-color: #d2e3fc;
+
+  --el-input-bg-color: #ffffff;
+  --el-input-border-color: #dadce0;
+  --el-input-hover-border-color: #9aa0a6;
+  --el-input-focus-border-color: #1a73e8;
+  --el-input-placeholder-color: #80868b;
+  --el-input-text-color: #202124;
+
+  --el-dropdown-menuItem-hover-fill: #e8f0fe;
+  --el-dropdown-menuItem-hover-color: #1a73e8;
+  --el-menu-bg-color: #f8f9fa;
+  --el-menu-hover-bg-color: rgba(26,115,232,0.06);
+
+  --el-dialog-bg-color: #ffffff;
+  --el-dialog-title-font-size: 1.125rem;
+
+  --el-tag-bg-color: #e8f0fe;
+  --el-tag-border-color: #d2e3fc;
+  --el-tag-text-color: #1a73e8;
+
+  --el-switch-on-color: #1a73e8;
+
+  --el-fill-color-blank: #ffffff;
+  --el-fill-color: #f8f9fa;
+  --el-fill-color-light: #f8f9fa;
+  --el-fill-color-lighter: #ffffff;
+}

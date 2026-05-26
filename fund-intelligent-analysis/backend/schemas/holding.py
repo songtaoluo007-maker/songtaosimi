@@ -31,6 +31,10 @@ class HoldingResponse(BaseModel):
     daily_pnl_date: str = ""
     pnl_amount: float = 0
     pnl_ratio: float = 0
+    xirr: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    max_drawdown_date: str = ""
+    recovery_days: Optional[int] = None
     source: str = "manual"
     is_active: bool = True
 

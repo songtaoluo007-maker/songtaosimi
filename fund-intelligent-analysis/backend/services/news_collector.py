@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import traceback
 from datetime import datetime
@@ -19,6 +20,8 @@ from backend.models.fund import Fund
 from backend.models.holding import Holding
 from backend.models.news import News
 from backend.models.trade import Trade  # noqa: F401 - ensure SQLAlchemy relationship is registered
+from backend.services.news_classifier import classify_news
+from backend.utils import clear_proxy_env as _clear_proxy_env
 
 
 POSITIVE_KEYWORDS = (
@@ -86,17 +89,14 @@ MAX_GLOBAL_ROWS = 100
 MAX_ROWS_PER_TOPIC = 18
 MAX_TOPIC_SEARCHES = 30
 MAX_HOLDING_FUND_CODES = 16
-
-
-def _clear_proxy_env() -> None:
-    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"]:
-        os.environ.pop(key, None)
-    os.environ["NO_PROXY"] = "*"
-    os.environ["no_proxy"] = "*"
+HTTP_RETRIES = 2
+HTTP_RETRY_DELAY = 1.0
 
 
 def _clean_text(value, limit: int | None = None) -> str:
     text = "" if value is None else str(value).strip()
+    # 修复编码损坏：替换 surrogate 字符和无法解码的字节
+    text = text.encode("utf-8", errors="surrogateescape").decode("utf-8", errors="replace")
     text = " ".join(text.split())
     return text[:limit] if limit else text
 
@@ -142,6 +142,7 @@ def _upsert_news(
     url = _clean_text(url, 500)
     if not title:
         return False
+    classified = classify_news(title, content, source, keyword)
 
     existing = db.query(News).filter(News.title == title).first()
     if existing:
@@ -158,8 +159,14 @@ def _upsert_news(
         if url and not existing.url:
             existing.url = url
             changed = True
-        if changed:
-            existing.sentiment = classify_sentiment(existing.title, existing.content)
+        if changed or not existing.impact_items or existing.impact_items == "[]":
+            existing.sentiment = classified.get("sentiment") or classify_sentiment(existing.title, existing.content)
+            existing.category = classified.get("category") or existing.category
+            existing.sub_category = classified.get("sub_category") or existing.sub_category
+            existing.importance_score = classified.get("importance_score", existing.importance_score)
+            existing.impact_items = json.dumps(classified.get("impact_items", []), ensure_ascii=False)
+            existing.related_topics = json.dumps(classified.get("related_topics", []), ensure_ascii=False)
+            existing.is_breaking = bool(classified.get("is_breaking"))
         return False
 
     db.add(
@@ -169,7 +176,13 @@ def _upsert_news(
             source=source,
             url=url,
             keyword=_clean_text(keyword, 50),
-            sentiment=classify_sentiment(title, content),
+            sentiment=classified.get("sentiment") or classify_sentiment(title, content),
+            category=classified.get("category", "推荐"),
+            sub_category=classified.get("sub_category", "全部"),
+            importance_score=classified.get("importance_score", 50),
+            impact_items=json.dumps(classified.get("impact_items", []), ensure_ascii=False),
+            related_topics=json.dumps(classified.get("related_topics", []), ensure_ascii=False),
+            is_breaking=bool(classified.get("is_breaking")),
             publish_time=publish_time,
         )
     )
@@ -279,29 +292,37 @@ def _collect_topic_news(db, ak, keywords: list[str]) -> int:
     return count
 
 
-def collect_news():
-    """采集财经新闻。"""
+def collect_news() -> None:
+    """采集财经新闻，失败自动重试。"""
     _clear_proxy_env()
     db = SessionLocal()
-    try:
-        import akshare as ak
+    last_error = None
+    for attempt in range(1 + HTTP_RETRIES):
+        try:
+            import akshare as ak
 
-        logger.info("开始采集财经新闻...")
-        count = 0
-        count += _collect_em_global(db, ak)
-        count += _collect_cls_global(db, ak)
-        db.commit()
+            logger.info("开始采集财经新闻..." + (f" (第{attempt}次)" if attempt > 1 else ""))
+            count = 0
+            count += _collect_em_global(db, ak)
+            count += _collect_cls_global(db, ak)
+            db.commit()
 
-        keywords = _build_topic_keywords(db)
-        count += _collect_topic_news(db, ak, keywords)
-        db.commit()
-        logger.info(f"新闻采集完成，新增 {count} 条，覆盖关键词 {len(keywords)} 个")
+            keywords = _build_topic_keywords(db)
+            count += _collect_topic_news(db, ak, keywords)
+            db.commit()
+            logger.info(f"新闻采集完成，新增 {count} 条，覆盖关键词 {len(keywords)} 个")
+            db.close()
+            return
 
-    except Exception as e:
-        logger.error(f"新闻采集失败: {e}\n{traceback.format_exc()}")
-        db.rollback()
-    finally:
-        db.close()
+        except Exception as e:
+            last_error = e
+            logger.warning(f"新闻采集第{attempt}次失败: {e}")
+            db.rollback()
+            if attempt <= HTTP_RETRIES:
+                import time
+                time.sleep(HTTP_RETRY_DELAY * attempt)
+    logger.error(f"新闻采集全部{HTTP_RETRIES + 1}次尝试失败: {last_error}")
+    db.close()
 
 
 if __name__ == "__main__":

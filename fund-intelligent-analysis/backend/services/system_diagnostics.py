@@ -253,9 +253,9 @@ def build_diagnostics(db: Session) -> dict:
             "key": "api_key",
             "title": "AI API Key",
             "status": "ok"
-            if settings.DEEPSEEK_API_KEY and settings.DEEPSEEK_API_KEY != "your_deepseek_api_key_here"
+            if settings.has_api_key
             else "warning",
-            "message": "已配置" if settings.DEEPSEEK_API_KEY else "未配置",
+            "message": "已配置" if settings.has_api_key else "未配置",
             "detail": "未配置时仍可看行情，但不能生成AI建议。",
         },
         {

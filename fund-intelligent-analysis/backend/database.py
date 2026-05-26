@@ -1,13 +1,39 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from loguru import logger
 from backend.config import settings
+from backend.utils import sanitize_text
 
 
 engine = create_engine(
     settings.DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False},  # SQLite需要
+    connect_args={
+        "check_same_thread": False,  # SQLite需要
+        "timeout": 30,  # SQLite 写入锁等待超时（秒）
+    },
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,
 )
+
+# 启用 WAL 模式以提升并发读写性能（失败不影响启动）
+if settings.DATABASE_URL.startswith("sqlite"):
+    from sqlalchemy import event
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA journal_mode=WAL")
+        except Exception as e:
+            logger.debug(f"WAL模式设置跳过（可能已启用或权限不足）: {e}")
+        try:
+            cursor.execute("PRAGMA busy_timeout=30000")
+        except Exception as e:
+            logger.debug(f"busy_timeout设置失败: {e}")
+        cursor.close()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -26,63 +52,56 @@ def get_db():
 
 
 def init_db():
-    """初始化数据库，创建所有表"""
+    """初始化数据库：创建表 + 运行迁移 + 清洗数据"""
     # 导入所有模型以确保它们被注册
-    from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group  # noqa: F401
+    from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group, user, capital_flow, ai_advice_review, fund_tag, portfolio_snapshot, fund_manager, fund_top_holding, investment_plan, asset_allocation  # noqa: F401
 
+    # create_all 处理全新部署（幂等：已有表不重复创建）
     Base.metadata.create_all(bind=engine)
-    _ensure_sqlite_columns()
 
+    # alembic 处理已有数据库的增量迁移
+    try:
+        from alembic.config import Config
+        from alembic import command
 
-def _ensure_sqlite_columns():
-    """为本地SQLite做轻量字段补齐，避免已有数据库升级后缺列。"""
-    if not settings.DATABASE_URL.startswith("sqlite"):
-        return
+        _dir = os.path.dirname(os.path.abspath(__file__))
+        alembic_cfg = Config(os.path.join(_dir, "alembic.ini"))
+        command.upgrade(alembic_cfg, "head")
+    except Exception as e:
+        logger.warning(f"Alembic迁移跳过（可能首次启动或路径问题）: {e}")
 
-    columns = {
-        "market_view": "VARCHAR(20) DEFAULT 'neutral'",
-        "overall_suggestion": "TEXT DEFAULT ''",
-        "risk_level": "VARCHAR(20) DEFAULT 'medium'",
-        "data_quality": "JSON DEFAULT '{}'",
-    }
+    # 清洗历史数据中的编码损坏
     with engine.begin() as conn:
-        existing = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(ai_advices)").fetchall()}
-        for name, ddl in columns.items():
-            if name not in existing:
-                conn.exec_driver_sql(f"ALTER TABLE ai_advices ADD COLUMN {name} {ddl}")
+        _clean_garbled_text(conn)
 
-        holding_columns = {
-            "daily_pnl": "NUMERIC(16,2) DEFAULT 0",
-            "daily_pnl_ratio": "NUMERIC(8,4) DEFAULT 0",
-            "daily_pnl_date": "DATE",
-        }
-        existing_holdings = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(holdings)").fetchall()}
-        for name, ddl in holding_columns.items():
-            if name not in existing_holdings:
-                conn.exec_driver_sql(f"ALTER TABLE holdings ADD COLUMN {name} {ddl}")
 
-        conn.exec_driver_sql("UPDATE news SET keyword = '快讯' WHERE keyword = '今日快讯'")
-
-        conn.exec_driver_sql(
-            """
-            CREATE TABLE IF NOT EXISTS fund_groups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR(80) NOT NULL UNIQUE,
-                description VARCHAR(300) DEFAULT '',
-                color VARCHAR(20) DEFAULT '#2f6fef',
-                is_active BOOLEAN DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        conn.exec_driver_sql(
-            """
-            CREATE TABLE IF NOT EXISTS fund_group_members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                group_id INTEGER NOT NULL,
-                fund_code VARCHAR(6) NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(group_id, fund_code)
-            )
-            """
-        )
+def _clean_garbled_text(conn):
+    """清洗数据库中已存在的编码损坏数据——每次启动检查一次。"""
+    import re
+    surr_pattern = re.compile(r'[\ud800-\udfff]')
+    for table, cols in [
+        ("news", ["title", "content", "keyword"]),
+        ("funds", ["fund_name"]),
+        ("market_snapshots", ["name"]),
+        ("ai_advices", ["overall_suggestion"]),
+    ]:
+        try:
+            rows = conn.exec_driver_sql(
+                f"SELECT id, {', '.join(cols)} FROM {table}"
+            ).fetchall()
+            updates = 0
+            for row in rows:
+                rid = row[0]
+                for i, col in enumerate(cols):
+                    val = row[i + 1] or ""
+                    if surr_pattern.search(val):
+                        clean = sanitize_text(val)
+                        conn.exec_driver_sql(
+                            f"UPDATE {table} SET {col} = ? WHERE id = ?",
+                            (clean, rid),
+                        )
+                        updates += 1
+            if updates:
+                logger.info(f"清洗 {table} 表 {updates} 处编码损坏")
+        except Exception as e:
+            logger.debug(f"清洗 {table} 表时跳过: {e}")

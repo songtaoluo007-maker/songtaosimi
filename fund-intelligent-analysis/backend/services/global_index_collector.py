@@ -1,22 +1,13 @@
-"""  
+"""
 全球指数采集服务
 """
-import os
 import traceback
 from datetime import date, datetime
 from loguru import logger
 
 from backend.database import SessionLocal
 from backend.models.market_snapshot import MarketSnapshot
-
-
-def _clear_proxy_env():
-    """清除可能干扰网络请求的代理环境变量，包括Windows系统代理"""
-    for key in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY', 'all_proxy', 'ALL_PROXY']:
-        os.environ.pop(key, None)
-    # 设置 NO_PROXY=* 让 requests/urllib3 跳过 Windows 系统代理
-    os.environ['NO_PROXY'] = '*'
-    os.environ['no_proxy'] = '*'
+from backend.utils import clear_proxy_env as _clear_proxy_env
 
 
 # 新浪Finance全球指数代码映射：新浪代码 -> (symbol, name)

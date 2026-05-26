@@ -1,261 +1,213 @@
+"""
+基金智能分析 — Windows 桌面应用
+基于 pywebview 的原生窗口 + FastAPI 后端自动管理
+"""
 from __future__ import annotations
 
 import ctypes
 import os
-import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
 
-
-ROOT = Path(__file__).resolve().parents[1]
+if getattr(sys, "frozen", False):
+    ROOT = Path(sys._MEIPASS)
+else:
+    ROOT = Path(__file__).resolve().parents[1]
 URL = "http://127.0.0.1:8000"
 PORT = 8000
 LOG_DIR = ROOT / "data" / "logs"
 ICON = ROOT / "assets" / "fund-ai.ico"
 PNG_ICON = ROOT / "assets" / "fund-ai-128.png"
 DESKTOP_LOG = LOG_DIR / "desktop_app.log"
+APP_TITLE = "基金智能分析"
 
 
-def log(message: str) -> None:
+def log(msg: str) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
     with open(DESKTOP_LOG, "a", encoding="utf-8") as f:
-        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {message}\n")
+        f.write(f"{ts} {msg}\n")
 
 
 def is_healthy() -> bool:
     try:
-        with urllib.request.urlopen(f"{URL}/api/health", timeout=2) as resp:
+        with urllib.request.urlopen(f"{URL}/api/health", timeout=3) as resp:
             return b'"ok"' in resp.read()
     except Exception:
         return False
 
 
-def _creationflags() -> int:
-    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
-
-
-def _listening_pids(port: int) -> list[int]:
-    try:
-        output = subprocess.check_output(
-            ["netstat", "-ano", "-p", "tcp"],
-            text=True,
-            encoding="utf-8",
-            errors="ignore",
-            creationflags=_creationflags(),
-        )
-    except Exception as exc:
-        log(f"netstat failed: {type(exc).__name__}: {exc}")
-        return []
-    pids = []
-    marker = f":{port}"
-    for line in output.splitlines():
-        parts = line.split()
-        if len(parts) >= 5 and parts[0].upper().startswith("TCP") and parts[3].upper() == "LISTENING":
-            if parts[1].endswith(marker) or marker in parts[1]:
-                try:
-                    pids.append(int(parts[-1]))
-                except ValueError:
-                    continue
-    return sorted(set(pids))
-
-
-def _process_command_line(pid: int) -> str:
-    command = (
-        "try { "
-        f"(Get-CimInstance Win32_Process -Filter \"ProcessId = {pid}\").CommandLine "
-        "} catch { '' }"
-    )
-    try:
-        result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", command],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="ignore",
-            creationflags=_creationflags(),
-            timeout=5,
-        )
-        return (result.stdout or "").strip()
-    except Exception as exc:
-        log(f"query pid {pid} failed: {type(exc).__name__}: {exc}")
-        return ""
-
-
-def release_stale_backend_port() -> None:
-    """清理本项目残留的非健康后端进程，避免断电后端口被占用。"""
+def start_backend():
     if is_healthy():
+        log("后端已运行，跳过启动")
         return
-    root_text = str(ROOT).lower()
-    for pid in _listening_pids(PORT):
-        if pid == os.getpid():
-            continue
-        cmdline = _process_command_line(pid)
-        normalized_cmd = cmdline.lower().replace("/", "\\")
-        if root_text not in normalized_cmd and "scripts\\run_backend.py" not in normalized_cmd:
-            log(f"port {PORT} occupied by unrelated pid {pid}: {cmdline}")
-            continue
-        log(f"killing stale backend pid {pid}: {cmdline}")
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/F"],
-                capture_output=True,
-                creationflags=_creationflags(),
-                timeout=8,
-            )
-        except Exception as exc:
-            log(f"taskkill pid {pid} failed: {type(exc).__name__}: {exc}")
 
-
-def start_backend() -> subprocess.Popen | None:
-    if is_healthy():
-        log("backend already healthy")
-        return None
-    release_stale_backend_port()
+    sys.path.insert(0, str(ROOT))
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    stdout = open(LOG_DIR / "desktop_backend_stdout.log", "ab", buffering=0)
-    stderr = open(LOG_DIR / "desktop_backend_stderr.log", "ab", buffering=0)
-    log("starting backend")
-    return subprocess.Popen(
-        [sys.executable, str(ROOT / "scripts" / "run_backend.py")],
-        cwd=str(ROOT),
-        stdout=stdout,
-        stderr=stderr,
-        creationflags=_creationflags(),
-    )
+
+    import uvicorn
+    from backend.config import settings
+
+    def _run():
+        try:
+            # PyInstaller console=False 时 sys.std{out,err} 为 None
+            if sys.stdout is None:
+                sys.stdout = open(os.devnull, 'w')
+            if sys.stderr is None:
+                sys.stderr = open(os.devnull, 'w')
+            uvicorn.run(
+                "backend.main:app",
+                host=settings.BACKEND_HOST,
+                port=settings.BACKEND_PORT,
+                log_level="warning",
+            )
+        except Exception as e:
+            log(f"后端线程异常退出: {type(e).__name__}: {e}")
+            import traceback
+            log(traceback.format_exc())
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    log(f"后端线程已启动 {settings.BACKEND_HOST}:{settings.BACKEND_PORT}")
 
 
-def wait_backend(update_status) -> bool:
-    for idx in range(45):
+def wait_backend(timeout: int = 60, callback=None) -> bool:
+    for i in range(timeout):
         if is_healthy():
-            update_status("服务已就绪，正在打开桌面工作台...")
+            if callback:
+                callback(f"服务就绪 ({i + 1}s)")
             return True
-        update_status(f"正在启动本地分析服务... {idx + 1}/45")
+        if callback and i % 3 == 0:
+            callback(f"启动中... {i + 1}/{timeout}s")
         time.sleep(1)
     return False
 
 
-def show_splash_and_start() -> bool:
+def show_splash():
+    """显示启动画面，返回后端是否就绪"""
     import tkinter as tk
     from tkinter import ttk
 
     root = tk.Tk()
-    root.title("基金智能分析")
-    root.geometry("520x320")
+    root.title(APP_TITLE)
+    root.geometry("480x300")
     root.resizable(False, False)
     root.configure(bg="#0f172a")
+    root.overrideredirect(True)
+
     if ICON.exists():
-        root.iconbitmap(str(ICON))
+        try:
+            root.iconbitmap(str(ICON))
+        except Exception:
+            pass
+
+    # 居中
     root.update_idletasks()
-    x = (root.winfo_screenwidth() - 520) // 2
-    y = (root.winfo_screenheight() - 320) // 2
-    root.geometry(f"520x320+{x}+{y}")
+    w, h = 480, 300
+    x = (root.winfo_screenwidth() - w) // 2
+    y = (root.winfo_screenheight() - h) // 2
+    root.geometry(f"{w}x{h}+{x}+{y}")
 
     frame = tk.Frame(root, bg="#0f172a")
-    frame.pack(fill="both", expand=True, padx=34, pady=28)
+    frame.pack(fill="both", expand=True, padx=30, pady=24)
 
     if PNG_ICON.exists():
-        icon_img = tk.PhotoImage(file=str(PNG_ICON))
-        tk.Label(frame, image=icon_img, bg="#0f172a").pack()
-        frame.icon_img = icon_img
+        try:
+            img = tk.PhotoImage(file=str(PNG_ICON))
+            tk.Label(frame, image=img, bg="#0f172a").pack()
+            frame._icon = img
+        except Exception:
+            pass
 
-    tk.Label(
-        frame,
-        text="基金智能分析",
-        font=("Microsoft YaHei UI", 22, "bold"),
-        fg="#f8fafc",
-        bg="#0f172a",
-    ).pack(pady=(12, 4))
-    tk.Label(
-        frame,
-        text="本地私人基金量化系统",
-        font=("Microsoft YaHei UI", 11),
-        fg="#93c5fd",
-        bg="#0f172a",
-    ).pack()
-    status = tk.StringVar(value="正在准备启动...")
-    tk.Label(
-        frame,
-        textvariable=status,
-        font=("Microsoft YaHei UI", 10),
-        fg="#cbd5e1",
-        bg="#0f172a",
-    ).pack(pady=(30, 10))
-    progress = ttk.Progressbar(frame, mode="indeterminate", length=340)
-    progress.pack()
-    progress.start(12)
+    tk.Label(frame, text=APP_TITLE, font=("Microsoft YaHei UI", 20, "bold"),
+             fg="#f8fafc", bg="#0f172a").pack(pady=(10, 4))
+    tk.Label(frame, text="本地私人基金量化系统", font=("Microsoft YaHei UI", 10),
+             fg="#93c5fd", bg="#0f172a").pack()
 
-    def update_status(text: str) -> None:
-        status.set(text)
+    status_var = tk.StringVar(value="正在准备...")
+    tk.Label(frame, textvariable=status_var, font=("Microsoft YaHei UI", 9),
+             fg="#cbd5e1", bg="#0f172a").pack(pady=(24, 8))
+
+    bar = ttk.Progressbar(frame, mode="indeterminate", length=340)
+    bar.pack()
+    bar.start(12)
+
+    def update(msg: str):
+        status_var.set(msg)
         root.update()
 
-    log("show splash")
+    log("启动画面显示")
     start_backend()
-    ready = wait_backend(update_status)
-    progress.stop()
+    ready = wait_backend(callback=update)
+    bar.stop()
     root.destroy()
+
     if not ready:
-        log("backend startup timeout")
         ctypes.windll.user32.MessageBoxW(
-            None,
-            f"本地服务启动超时，请查看日志：{LOG_DIR}",
-            "基金智能分析",
-            0x10,
-        )
+            None, f"本地服务启动超时。\n请查看日志: {LOG_DIR}", APP_TITLE, 0x10)
     return ready
 
 
-def open_desktop_window() -> None:
+def open_window():
+    """打开 pywebview 原生窗口"""
+    target_url = f"{URL}/?ts={int(time.time())}"
+
     try:
         import webview
-
-        log("opening pywebview window")
-        try:
-            webview.settings["ALLOW_DOWNLOADS"] = True
-        except Exception:
-            pass
-        window = webview.create_window(
-            "基金智能分析",
-            URL,
-            width=1360,
-            height=900,
-            min_size=(1100, 720),
-            text_select=True,
-        )
-        webview.start(private_mode=False, debug=False)
-        log("pywebview closed")
+    except ImportError:
+        log("pywebview 未安装，用浏览器打开")
+        os.startfile(URL)
         return
-    except Exception as exc:
-        log(f"pywebview failed: {type(exc).__name__}: {exc}")
 
-    edge_candidates = [
-        os.path.join(os.environ.get("ProgramFiles(x86)", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-        os.path.join(os.environ.get("ProgramFiles", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-    ]
-    for edge in edge_candidates:
-        if edge and os.path.exists(edge):
-            log(f"opening edge app: {edge}")
-            user_data = ROOT / "data" / "edge_app_profile"
-            user_data.mkdir(parents=True, exist_ok=True)
-            subprocess.Popen([
-                edge,
-                f"--app={URL}",
-                "--new-window",
-                f"--user-data-dir={user_data}",
-                "--no-first-run",
-            ], cwd=str(ROOT))
-            return
-    log("opening default browser fallback")
-    os.startfile(URL)
+    log(f"打开窗口: {target_url}")
+    try:
+        webview.settings["ALLOW_DOWNLOADS"] = True
+    except Exception:
+        pass
+
+    webview.create_window(
+        APP_TITLE,
+        target_url,
+        width=1360,
+        height=900,
+        min_size=(1024, 640),
+        text_select=True,
+    )
+    webview.start(private_mode=False, debug=False)
+    log("窗口已关闭")
 
 
-def main() -> int:
-    if show_splash_and_start():
-        open_desktop_window()
-        return 0
-    return 1
+def main():
+    os.chdir(str(ROOT))
+
+    # 单实例检查
+    k32 = ctypes.windll.kernel32
+    mutex = k32.CreateMutexW(None, False, "FundAI_Desktop_Mutex")
+    if k32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        ctypes.windll.user32.MessageBoxW(
+            None, "基金智能分析已在运行中。\n请检查系统托盘或任务栏。", APP_TITLE, 0x40)
+        return
+
+    log("========== 桌面应用启动 ==========")
+
+    if not show_splash():
+        return
+
+    open_window()
+
+    # 关闭后端
+    log("正在关闭后端...")
+    for _ in range(5):
+        try:
+            urllib.request.urlopen(f"{URL}/api/health", timeout=1)
+        except Exception:
+            break
+        time.sleep(0.5)
+    log("========== 桌面应用退出 ==========")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

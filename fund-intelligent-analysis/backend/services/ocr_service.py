@@ -159,8 +159,8 @@ class OcrService:
                     if nav > 0:
                         item["shares"] = round(amount / nav, 2)
                         item["nav"] = nav
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"OCR NAV查询失败 code={code}: {e}")
 
             # 支付宝来源：补全成本推算
             if item.get("source") == "alipay":
