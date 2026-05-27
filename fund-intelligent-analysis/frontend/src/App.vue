@@ -86,13 +86,15 @@
   - logout() 改为 async，登出后 await router.replace 再清状态，避免最后一秒访问受保护页报 401
 -->
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { getOcrSyncStatus } from '@/api'
 import {
   DataAnalysis, Wallet, MagicStick, TrendCharts, Coin,
   Document, Camera, List, Setting, SwitchButton,
-  Histogram, Memo, RefreshRight, Calendar,
+  Histogram, Memo, RefreshRight, Calendar, Tools,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -109,6 +111,8 @@ const primaryNav = [
 const analysisNav = [
   { path: '/risk-exposure', label: '风险暴露', icon: Histogram },
   { path: '/ai-advisor/review', label: 'AI 复盘', icon: RefreshRight },
+  { path: '/fee-ledger', label: '费率账本', icon: Coin },
+  { path: '/toolbox', label: '老基民工具箱', icon: Tools },
   { path: '/capital-flow', label: '资金流向', icon: Coin },
   { path: '/market', label: '行情监控', icon: TrendCharts },
   { path: '/news', label: '新闻资讯', icon: Document },
@@ -122,6 +126,36 @@ const systemNav = [
 
 const authStore = useAuthStore()
 const currentUserName = computed(() => authStore.displayName || '本机所有者')
+
+function localDayKey() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = `${now.getMonth() + 1}`.padStart(2, '0')
+  const d = `${now.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+async function maybeShowOcrReminder() {
+  if (route.meta.public) return
+  try {
+    const status = await getOcrSyncStatus() as any
+    if (!status?.due) return
+    const reminderKey = `ocr-sync-reminder:${localDayKey()}`
+    if (localStorage.getItem(reminderKey)) return
+    localStorage.setItem(reminderKey, '1')
+    ElNotification({
+      title: '持仓截图需要更新',
+      message: status.message || '请导入最新持仓截图',
+      type: 'warning',
+      duration: 9000,
+      onClick: () => router.push('/ocr-import'),
+    })
+  } catch {
+    // OCR 状态提醒不应影响主界面加载
+  }
+}
+
+watch(() => route.fullPath, maybeShowOcrReminder, { immediate: true })
 
 async function logout() {
   authStore.logout()

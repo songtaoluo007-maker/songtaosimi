@@ -206,6 +206,9 @@ from backend.api.fund_manager_v3 import router as fund_manager_router
 from backend.api.investment_plan_v3 import router as investment_plan_router
 from backend.api.asset_allocation_v3 import router as asset_allocation_router
 from backend.api.user_profile_v3 import router as user_profile_router
+from backend.api.fund_fee_v3 import router as fund_fee_router
+from backend.api.decision_review_v3 import router as decision_review_router
+from backend.api.senior_toolbox_v3 import router as senior_toolbox_router
 from backend.api.trade import router as trade_router
 from backend.api.market import router as market_router
 from backend.api.news import router as news_router
@@ -229,6 +232,9 @@ app.include_router(fund_manager_router)
 app.include_router(investment_plan_router)
 app.include_router(asset_allocation_router)
 app.include_router(user_profile_router)
+app.include_router(fund_fee_router)
+app.include_router(decision_review_router)
+app.include_router(senior_toolbox_router)
 app.include_router(trade_router)
 app.include_router(market_router)
 app.include_router(news_router)

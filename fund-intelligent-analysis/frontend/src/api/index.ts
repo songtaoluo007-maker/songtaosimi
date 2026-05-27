@@ -42,6 +42,35 @@ export const getOverlapReport = () => request.get('/risk-exposure/overlap')
 export const syncOverlapHoldings = () => request.post('/risk-exposure/overlap/sync', {}, { timeout: 300000 })
 export const syncOverlapSingle = (code: string) => request.post(`/risk-exposure/overlap/sync/${code}`, {}, { timeout: 60000 })
 
+// P2.4 — 老基民工具集
+export const getHoldingMilestones = () => request.get('/toolbox/milestones')
+export const getQuarterlyDisclosure = () => request.get('/toolbox/quarterly-disclosure')
+export const getSwitchSavings = (params: { from_code: string; to_code: string; amount?: number; convert_fee_rate?: number }) =>
+  request.get('/toolbox/switch-savings', { params })
+export const getHolidayAlerts = () => request.get('/toolbox/holidays')
+export const getFeeHealth = () => request.get('/toolbox/fee-health')
+export const runMilestoneCheck = () => request.post('/toolbox/milestones/run-check')
+
+// P2.2 — 决策复盘
+export const getBehaviorBias = (month?: string) =>
+  request.get('/decision-review/bias', { params: month ? { month } : {} })
+export const persistBehaviorBias = (month?: string) =>
+  request.post('/decision-review/bias/persist', null, { params: month ? { month } : {} })
+export const getBiasHistory = (limit = 12) =>
+  request.get('/decision-review/bias/history', { params: { limit } })
+export const getDecisions = (month?: string, limit = 100) =>
+  request.get('/decision-review/decisions', { params: { ...(month ? { month } : {}), limit } })
+export const runFullReview = () => request.post('/decision-review/run')
+
+// P2.1 — 费率账本
+export const getFeeSchedules = () => request.get('/fund-fees/schedules')
+export const getFeeSchedule = (code: string) => request.get(`/fund-fees/schedules/${code}`)
+export const saveFeeSchedule = (code: string, data: any) => request.put(`/fund-fees/schedules/${code}`, data)
+export const runFeeAccrual = () => request.post('/fund-fees/accrual/run')
+export const getYearlyLedger = (year?: number) => request.get('/fund-fees/ledger/yearly', { params: year ? { year } : {} })
+export const estimateRedemption = (code: string, opts: { redeem_shares?: number; redeem_amount?: number } = {}) =>
+  request.get(`/fund-fees/redemption-estimate/${code}`, { params: opts })
+
 // P1.3 — 用户画像
 export const getUserProfile = () => request.get('/user/profile')
 export const saveUserProfile = (data: any) => request.put('/user/profile', data)
@@ -123,6 +152,11 @@ export const uploadOcr = (formData: FormData, source: string) => {
   })
 }
 export const confirmOcr = (items: any[]) => request.post('/ocr/confirm', items)
+export const getOcrSyncStatus = () => request.get('/ocr/status')
+export const previewOcrDiff = (items: any[], tradeDate?: string) =>
+  request.post('/ocr/diff-preview', { items, trade_date: tradeDate })
+export const confirmOcrSnapshot = (items: any[], options?: { trade_date?: string; generate_trades?: boolean }) =>
+  request.post('/ocr/confirm-snapshot', { items, ...(options || {}) })
 
 // 上传交易记录截图并识别
 export const uploadOcrTrades = (formData: FormData) => {

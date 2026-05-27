@@ -94,6 +94,94 @@
       </el-col>
     </el-row>
 
+    <!-- 用户决策行为偏差 -->
+    <el-card shadow="hover" class="behavior-card">
+      <template #header>
+        <div class="card-head">
+          <div>
+            <span style="font-weight: bold;">用户行为偏差雷达图</span>
+            <small>把交易记录转成可复盘的行为模式</small>
+          </div>
+          <div class="card-actions">
+            <el-date-picker
+              v-model="behaviorMonth"
+              type="month"
+              value-format="YYYY-MM"
+              placeholder="选择月份"
+              style="width: 135px;"
+              @change="loadBehaviorReview"
+            />
+            <el-button :icon="Refresh" :loading="behaviorLoading" @click="loadBehaviorReview">刷新</el-button>
+            <el-button type="primary" :loading="reviewRunning" @click="handleRunDecisionReview">生成复盘</el-button>
+          </div>
+        </div>
+      </template>
+
+      <el-row :gutter="16">
+        <el-col :xs="24" :lg="12">
+          <div v-if="behaviorNoData" class="behavior-empty">
+            <el-icon :size="42" color="#c0c4cc"><DataAnalysis /></el-icon>
+            <strong>本月还没有可复盘交易</strong>
+            <span>导入交易后点击"生成复盘"，系统会按交易日、AI 建议和 30 天结果生成行为画像。</span>
+          </div>
+          <v-chart v-else class="bias-chart" :option="behaviorRadarOption" autoresize />
+        </el-col>
+        <el-col :xs="24" :lg="12">
+          <div class="behavior-summary">
+            <div>
+              <span>本月决策</span>
+              <strong>{{ behaviorTotals.total_decisions || 0 }}</strong>
+            </div>
+            <div>
+              <span>跟随 AI</span>
+              <strong>{{ pctText(bias.follow_advice_rate) }}</strong>
+            </div>
+            <div>
+              <span>已复盘</span>
+              <strong>{{ behaviorTotals.reviewed_count || 0 }}</strong>
+            </div>
+            <div>
+              <span>平均持有</span>
+              <strong>{{ numberText(bias.avg_holding_days, 1) }} 天</strong>
+            </div>
+          </div>
+          <el-alert
+            v-if="bias.biggest_regret"
+            class="regret-alert"
+            title="当月最需要复盘的一笔操作"
+            :description="bias.biggest_regret"
+            type="warning"
+            show-icon
+            :closable="false"
+          />
+          <el-table :data="decisionRows" size="small" stripe class="decision-table">
+            <el-table-column prop="decision_date" label="日期" width="105" />
+            <el-table-column label="基金" min-width="90" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.fund_code || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="行为" width="80">
+              <template #default="{ row }">
+                <el-tag size="small" :type="userActionTag(row.user_action)">
+                  {{ userActionLabel(row.user_action) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="决策" width="70">
+              <template #default="{ row }">{{ decisionTypeLabel(row.decision_type) }}</template>
+            </el-table-column>
+            <el-table-column label="30天结果" width="95" align="right">
+              <template #default="{ row }">
+                <span v-if="row.is_reviewed" :class="(row.outcome_pct || 0) >= 0 ? 'text-up' : 'text-down'">
+                  {{ (row.outcome_pct || 0) >= 0 ? '+' : '' }}{{ (row.outcome_pct || 0).toFixed(2) }}%
+                </span>
+                <span v-else style="color: var(--gray-400);">待回填</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <!-- 无数据提示 -->
     <el-card v-if="!stats.total && !loading" shadow="hover" style="text-align: center; padding: 40px;">
       <el-icon :size="48" color="#c0c4cc"><DataAnalysis /></el-icon>
@@ -209,7 +297,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Refresh } from '@element-plus/icons-vue'
+import VChart from 'vue-echarts'
+import { use } from 'echarts/core'
+import { RadarChart } from 'echarts/charts'
+import { LegendComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import request from '../api/request'
+
+use([RadarChart, LegendComponent, TooltipComponent, CanvasRenderer])
 
 const loading = ref(false)
 const batching = ref(false)
@@ -221,6 +317,11 @@ const pageSize = ref(20)
 const total = ref(0)
 const detailVisible = ref(false)
 const detailRow = ref<any>({})
+const behaviorMonth = ref(new Date().toISOString().slice(0, 7))
+const behaviorLoading = ref(false)
+const reviewRunning = ref(false)
+const bias = ref<any>({})
+const decisionRows = ref<any[]>([])
 
 const viewStatsRows = computed(() => {
   const vm = stats.value.by_market_view || {}
@@ -230,6 +331,56 @@ const viewStatsRows = computed(() => {
     { label: '中性', ...(vm.neutral || {}), hit_rate: vm.neutral?.hit_rate || 0, total: vm.neutral?.total || 0 },
   ].filter(r => r.total > 0)
 })
+
+const behaviorNoData = computed(() => !!bias.value.no_data)
+const behaviorTotals = computed(() => bias.value.totals || {})
+const behaviorRadarOption = computed(() => {
+  const value = [
+    pct(bias.value.chase_high_score),
+    pct(bias.value.cut_low_score),
+    pct(bias.value.frequent_trade_score),
+    pct(bias.value.follow_advice_rate),
+    pct(bias.value.follow_win_rate),
+    pct(bias.value.reverse_win_rate),
+  ]
+  return {
+    tooltip: { trigger: 'item' as const },
+    legend: { bottom: 0, data: ['行为画像'] },
+    radar: {
+      radius: '62%',
+      indicator: [
+        { name: '追涨', max: 100 },
+        { name: '杀跌', max: 100 },
+        { name: '频繁交易', max: 100 },
+        { name: '跟随 AI', max: 100 },
+        { name: '跟随胜率', max: 100 },
+        { name: '反向胜率', max: 100 },
+      ],
+    },
+    series: [{
+      type: 'radar',
+      data: [{ value, name: '行为画像' }],
+      areaStyle: { opacity: 0.22 },
+      lineStyle: { width: 2 },
+      symbol: 'circle',
+      symbolSize: 5,
+    }],
+  }
+})
+
+function pct(v: any) {
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0
+}
+
+function pctText(v: any) {
+  return `${pct(v).toFixed(1)}%`
+}
+
+function numberText(v: any, digits = 1) {
+  const n = Number(v)
+  return Number.isFinite(n) ? n.toFixed(digits) : (0).toFixed(digits)
+}
 
 // label helpers
 function viewLabel(v: string) {
@@ -262,6 +413,23 @@ function hitTagType(h: string) {
   return 'info'
 }
 
+function userActionLabel(v: string) {
+  const m: Record<string,string> = { follow: '跟随', reverse: '反向', self: '自主', ignore: '忽略' }
+  return m[v] || v || '-'
+}
+
+function userActionTag(v: string) {
+  if (v === 'follow') return 'success'
+  if (v === 'reverse') return 'warning'
+  if (v === 'self') return 'info'
+  return ''
+}
+
+function decisionTypeLabel(v: string) {
+  const m: Record<string,string> = { buy: '买入', sell: '卖出', hold: '持有', rebalance: '再平衡' }
+  return m[v] || v || '-'
+}
+
 async function loadStats() {
   try {
     const res = await request.get('/ai/review/stats', { params: { days: statsDays.value } }) as any
@@ -277,6 +445,36 @@ async function loadReviews() {
     total.value = res.total || 0
   } catch { /* empty */ }
   finally { loading.value = false }
+}
+
+async function loadBehaviorReview() {
+  behaviorLoading.value = true
+  try {
+    const params = behaviorMonth.value ? { month: behaviorMonth.value } : {}
+    const [biasRes, decisionsRes] = await Promise.all([
+      request.get('/decision-review/bias', { params }) as Promise<any>,
+      request.get('/decision-review/decisions', { params: { ...params, limit: 8 } }) as Promise<any>,
+    ])
+    bias.value = biasRes || {}
+    decisionRows.value = decisionsRes.items || []
+  } catch (e: any) {
+    ElMessage.error('行为复盘加载失败: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    behaviorLoading.value = false
+  }
+}
+
+async function handleRunDecisionReview() {
+  reviewRunning.value = true
+  try {
+    const res = await request.post('/decision-review/run') as any
+    ElMessage.success(`决策复盘完成：新增 ${res.inserted || 0} 条，回填 ${res.reviewed || 0} 条`)
+    await loadBehaviorReview()
+  } catch (e: any) {
+    ElMessage.error('决策复盘失败: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    reviewRunning.value = false
+  }
 }
 
 async function handleBatchReview() {
@@ -298,7 +496,7 @@ function viewDetail(row: any) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadStats(), loadReviews()])
+  await Promise.all([loadStats(), loadReviews(), loadBehaviorReview()])
 })
 </script>
 
@@ -313,6 +511,45 @@ onMounted(async () => {
 .stat-value { font-size: 28px; font-weight: 700; color: var(--gray-900); margin: 8px 0; }
 .stat-sub { font-size: 12px; color: var(--gray-400); }
 
+.behavior-card { margin-bottom: 20px; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.card-head small { display: block; margin-top: 3px; color: var(--gray-400); font-size: 12px; font-weight: 400; }
+.card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bias-chart { height: 330px; min-height: 300px; }
+.behavior-empty {
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--gray-500);
+  text-align: center;
+}
+.behavior-empty strong { color: var(--gray-700); }
+.behavior-empty span { max-width: 360px; font-size: 13px; line-height: 1.6; }
+.behavior-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.behavior-summary div {
+  padding: 12px;
+  border: 1px solid var(--gray-100);
+  border-radius: 6px;
+  background: var(--gray-50);
+}
+.behavior-summary span { display: block; color: var(--gray-400); font-size: 12px; }
+.behavior-summary strong { display: block; margin-top: 6px; color: var(--gray-900); font-size: 18px; }
+.regret-alert { margin-bottom: 12px; }
+.decision-table { margin-top: 8px; }
+
 .text-up { color: var(--danger-500); font-weight: 600; }
 .text-down { color: var(--success-500); font-weight: 600; }
+
+@media (max-width: 768px) {
+  .card-actions { width: 100%; }
+  .behavior-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 </style>

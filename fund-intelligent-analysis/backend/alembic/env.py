@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from backend.database import Base
 from backend.config import settings
 # 导入所有模型，确保 autogenerate 能检测到所有表
-from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group, user, capital_flow, ai_advice_review, fund_tag, portfolio_snapshot, fund_manager, fund_top_holding, investment_plan, asset_allocation  # noqa: F401
+from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group, user, capital_flow, ai_advice_review, fund_tag, portfolio_snapshot, fund_manager, fund_top_holding, investment_plan, asset_allocation, fund_fee, user_decision_review  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

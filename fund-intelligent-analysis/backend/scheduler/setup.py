@@ -50,6 +50,9 @@ def init_scheduler():
         job_sync_fund_managers,
         job_sync_fund_top_holdings,
         job_check_investment_plans,
+        job_daily_fee_accrual,
+        job_monthly_decision_review,
+        job_daily_milestone_check,
     )
 
     # A股指数行情 - 交易时间每5分钟
@@ -159,6 +162,30 @@ def init_scheduler():
         id="check_investment_plans", name="定投到期检查",
     )
 
+    # P2.1 — 每日费率计提：每个交易日 21:00（短任务）
+    _scheduler.add_job(
+        job_daily_fee_accrual,
+        CronTrigger(day_of_week="mon-fri", hour=21, minute=0),
+        id="daily_fee_accrual", name="每日费率计提",
+    )
+
+    # P2.4 — 持仓里程碑检查：每个交易日 09:30（短任务，飞书推送即将降费档的基金）
+    _scheduler.add_job(
+        job_daily_milestone_check,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=30),
+        id="daily_milestone_check", name="持仓里程碑检查",
+    )
+
+    # P2.2 — 月度决策复盘：每月 1 号 22:00（长任务）
+    def _trigger_monthly_review():
+        _run_in_long_pool(job_monthly_decision_review)
+
+    _scheduler.add_job(
+        _trigger_monthly_review,
+        CronTrigger(day="1", hour=22, minute=0),
+        id="monthly_decision_review", name="月度决策复盘",
+    )
+
     _scheduler.start()
     logger.info("调度器已启动，共注册 {} 个定时任务".format(len(_scheduler.get_jobs())))
 
@@ -228,6 +255,9 @@ def trigger_job_now(job_id: str) -> dict:
         "sync_fund_managers": jobs.job_sync_fund_managers,
         "sync_fund_top_holdings": jobs.job_sync_fund_top_holdings,
         "check_investment_plans": jobs.job_check_investment_plans,
+        "daily_fee_accrual": jobs.job_daily_fee_accrual,
+        "monthly_decision_review": jobs.job_monthly_decision_review,
+        "daily_milestone_check": jobs.job_daily_milestone_check,
     }
 
     func = job_func_map.get(job_id)
@@ -246,7 +276,7 @@ def trigger_job_now(job_id: str) -> dict:
                     logger.error(f"手动触发任务 {job_id} 失败: {e}")
 
             # 长任务（AI建议/复盘）走专用线程池
-            if job_id in ("ai_advice", "advice_review", "sync_fund_managers", "sync_fund_top_holdings"):
+            if job_id in ("ai_advice", "advice_review", "sync_fund_managers", "sync_fund_top_holdings", "monthly_decision_review"):
                 _long_task_executor.submit(_run_with_force)
                 return {"message": f"任务 {job_id} 已提交到长任务线程池执行"}
             else:

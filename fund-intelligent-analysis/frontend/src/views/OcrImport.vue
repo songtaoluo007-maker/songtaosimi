@@ -7,6 +7,14 @@
       </div>
     </header>
 
+    <div class="sync-banner" v-if="syncStatus?.due">
+      <div>
+        <strong>持仓截图需要更新</strong>
+        <span>{{ syncStatus.message }}</span>
+      </div>
+      <el-button type="warning" plain @click="step = 1">导入本周截图</el-button>
+    </div>
+
     <!-- 步骤指示器 -->
     <div class="steps-bar">
       <div class="step" :class="{ active: step === 1, done: step > 1 }">
@@ -92,6 +100,10 @@
           <span>重复基金</span>
           <strong style="color: var(--warning-600);">{{ duplicateCount }} 只</strong>
         </div>
+        <div class="summary-card" v-if="diffPreview">
+          <span>推断交易</span>
+          <strong>{{ diffPreview.summary.inferred_trade_count || 0 }} 条</strong>
+        </div>
       </div>
 
       <el-card shadow="hover">
@@ -100,7 +112,8 @@
             <span style="font-weight: bold;">识别结果 — 可编辑修正后导入</span>
             <div>
               <el-button @click="step = 1">返回重新上传</el-button>
-              <el-button type="primary" :disabled="editableResults.length === 0" @click="step = 3">
+              <el-button :loading="diffLoading" @click="loadDiffPreview">刷新差异</el-button>
+              <el-button type="primary" :disabled="editableResults.length === 0" @click="goConfirmStep">
                 下一步：确认导入
               </el-button>
             </div>
@@ -112,6 +125,19 @@
             <template #default="{ row }">
               <el-tag v-if="row._duplicate" type="warning" size="small" effect="dark">合并</el-tag>
               <el-tag v-else type="success" size="small">新增</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="闭环差异" width="135">
+            <template #default="{ row }">
+              <div class="diff-cell" v-if="diffByCode[row.fund_code]">
+                <el-tag :type="diffTagType(diffByCode[row.fund_code].status)" size="small">
+                  {{ diffByCode[row.fund_code].status_label }}
+                </el-tag>
+                <small v-if="diffByCode[row.fund_code].trade_type">
+                  {{ diffByCode[row.fund_code].trade_type }} {{ diffByCode[row.fund_code].inferred_shares }} 份
+                </small>
+              </div>
+              <span v-else class="muted">待刷新</span>
             </template>
           </el-table-column>
           <el-table-column label="基金代码" width="110">
@@ -184,7 +210,10 @@
     <section v-show="step === 3">
       <el-card shadow="hover">
         <template #header>
-          <span style="font-weight: bold;">确认导入 — 共 {{ editableResults.length }} 只基金</span>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+            <span style="font-weight: bold;">确认导入 — 共 {{ editableResults.length }} 只基金</span>
+            <el-date-picker v-model="tradeDate" type="date" value-format="YYYY-MM-DD" size="small" style="width: 150px;" />
+          </div>
         </template>
 
         <div class="confirm-grid">
@@ -206,9 +235,40 @@
               {{ totalImportPnl >= 0 ? '+' : '' }}¥{{ formatMoney(totalImportPnl) }}
             </strong>
           </div>
+          <div class="confirm-stat" v-if="diffPreview">
+            <span>推断交易</span>
+            <strong>{{ diffPreview.summary.inferred_trade_count || 0 }} 条</strong>
+          </div>
         </div>
 
         <el-divider />
+
+        <el-alert
+          v-if="missingHoldingCount > 0"
+          type="warning"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 14px;"
+          :title="`${missingHoldingCount} 只当前持仓未出现在本次截图中，系统不会自动按全部赎回处理`"
+        />
+
+        <div v-if="inferredTrades.length > 0" class="trade-preview">
+          <div class="preview-title">将自动生成的交易记录</div>
+          <el-table :data="inferredTrades" stripe size="small" max-height="220">
+            <el-table-column prop="fund_code" label="代码" width="90" />
+            <el-table-column prop="fund_name" label="名称" min-width="140" />
+            <el-table-column prop="trade_type" label="类型" width="80" />
+            <el-table-column label="份额" width="110">
+              <template #default="{ row }">{{ row.inferred_shares.toFixed(2) }}</template>
+            </el-table-column>
+            <el-table-column label="净值" width="100">
+              <template #default="{ row }">{{ row.nav_price.toFixed(4) }}</template>
+            </el-table-column>
+            <el-table-column label="金额" width="120">
+              <template #default="{ row }">¥{{ formatMoney(row.inferred_amount) }}</template>
+            </el-table-column>
+          </el-table>
+        </div>
 
         <el-table :data="editableResults" stripe size="small" max-height="360">
           <el-table-column label="" width="50">
@@ -234,7 +294,7 @@
         <div style="margin-top: 20px; text-align: center;">
           <el-button @click="step = 2">返回修改</el-button>
           <el-button type="primary" size="large" :loading="confirming" @click="handleConfirm">
-            <el-icon><CircleCheck /></el-icon> 确认导入 {{ editableResults.length }} 只基金
+            <el-icon><CircleCheck /></el-icon> 确认同步 {{ editableResults.length }} 只基金
           </el-button>
         </div>
       </el-card>
@@ -243,10 +303,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadFile } from 'element-plus'
-import { uploadOcr, confirmOcr } from '../api'
+import { uploadOcr, confirmOcrSnapshot, getOcrSyncStatus, previewOcrDiff } from '../api'
 
 const step = ref(1)
 const source = ref('tiantian')
@@ -256,6 +316,10 @@ const confirming = ref(false)
 const ocrResults = ref<any[]>([])
 const editableResults = ref<any[]>([])
 const ocrErrors = ref<string[]>([])
+const syncStatus = ref<any>(null)
+const diffPreview = ref<any>(null)
+const diffLoading = ref(false)
+const tradeDate = ref(formatLocalDate(new Date()))
 
 // 已有持仓的基金代码（用于重复检测）
 const existingCodes = ref<Set<string>>(new Set())
@@ -275,9 +339,33 @@ const duplicateCount = computed(() =>
   editableResults.value.filter(r => r._duplicate).length
 )
 const newCount = computed(() => editableResults.value.length - duplicateCount.value)
+const diffByCode = computed(() => {
+  const map: Record<string, any> = {}
+  ;(diffPreview.value?.diffs || []).forEach((item: any) => {
+    map[item.fund_code] = item
+  })
+  return map
+})
+const inferredTrades = computed(() =>
+  (diffPreview.value?.diffs || []).filter((item: any) => item.can_create_trade)
+)
+const missingHoldingCount = computed(() => diffPreview.value?.summary?.missing_holding_count || 0)
 
 function formatMoney(val: number) {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatLocalDate(day: Date) {
+  const y = day.getFullYear()
+  const m = `${day.getMonth() + 1}`.padStart(2, '0')
+  const d = `${day.getDate()}`.padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function diffTagType(status: string) {
+  if (status === 'new' || status === 'increased') return 'success'
+  if (status === 'decreased') return 'warning'
+  return 'info'
 }
 
 function recalcSummary() {
@@ -286,6 +374,7 @@ function recalcSummary() {
     r._pnlRatio = r.cost_amount > 0 ? (r._pnl / r.cost_amount) * 100 : 0
     r._duplicate = existingCodes.value.has(r.fund_code?.trim())
   })
+  diffPreview.value = null
 }
 
 function handleFileChange(file: UploadFile) {
@@ -356,12 +445,46 @@ async function handleRecognize() {
       let msg = `识别到 ${editableResults.value.length} 条持仓`
       if (dupes > 0) msg += `（${dupes} 只与现有持仓重复，将合并）`
       ElMessage.success(msg)
+      await loadDiffPreview()
       step.value = 2
     }
   } catch (e: any) {
     ElMessage.error('识别失败: ' + (e.message || '未知错误'))
   } finally {
     recognizing.value = false
+  }
+}
+
+async function loadSyncStatus() {
+  try {
+    syncStatus.value = await getOcrSyncStatus()
+  } catch {
+    syncStatus.value = null
+  }
+}
+
+async function loadDiffPreview() {
+  const validItems = editableResults.value.filter(r => r.fund_code)
+  if (validItems.length === 0) {
+    diffPreview.value = null
+    return false
+  }
+  diffLoading.value = true
+  try {
+    recalcSummary()
+    diffPreview.value = await previewOcrDiff(validItems, tradeDate.value)
+    return true
+  } catch (e: any) {
+    ElMessage.error('差异对账失败: ' + (e.response?.data?.detail || e.message || '未知错误'))
+    return false
+  } finally {
+    diffLoading.value = false
+  }
+}
+
+async function goConfirmStep() {
+  if (await loadDiffPreview()) {
+    step.value = 3
   }
 }
 
@@ -374,12 +497,17 @@ async function handleConfirm() {
 
   confirming.value = true
   try {
-    const res = await confirmOcr(validItems) as any
+    if (!diffPreview.value && !(await loadDiffPreview())) {
+      return
+    }
+    const res = await confirmOcrSnapshot(validItems, { trade_date: tradeDate.value, generate_trades: true }) as any
     ElMessage.success(res.message || `成功导入 ${validItems.length} 只基金`)
     ocrResults.value = []
     editableResults.value = []
     ocrErrors.value = []
+    diffPreview.value = null
     fileList.value = []
+    await loadSyncStatus()
     step.value = 1
   } catch (e: any) {
     ElMessage.error('导入失败: ' + (e.response?.data?.detail?.[0]?.msg || e.response?.data?.detail || e.message || '未知错误'))
@@ -387,6 +515,8 @@ async function handleConfirm() {
     confirming.value = false
   }
 }
+
+onMounted(loadSyncStatus)
 </script>
 
 <style scoped>
@@ -395,6 +525,20 @@ async function handleConfirm() {
 .page-head { margin-bottom: 24px; }
 .page-head h2 { margin: 0 0 4px; font-size: 24px; font-weight: 700; }
 .page-head p { margin: 0; color: var(--gray-500); font-size: 14px; }
+
+.sync-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--warning-300);
+  border-radius: var(--radius-md);
+  background: #fffbeb;
+}
+.sync-banner strong { display: block; color: var(--warning-700); font-size: 14px; }
+.sync-banner span { display: block; color: var(--gray-600); font-size: 13px; margin-top: 2px; }
 
 /* 步骤指示器 */
 .steps-bar {
@@ -451,10 +595,31 @@ async function handleConfirm() {
 .summary-card .up { color: var(--danger-500); }
 .summary-card .down { color: var(--success-500); }
 
+.diff-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.diff-cell small,
+.muted {
+  color: var(--gray-500);
+  font-size: 12px;
+}
+
+.trade-preview {
+  margin-bottom: 16px;
+}
+.preview-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
 /* 确认页面 */
 .confirm-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 16px;
 }
 .confirm-stat {
