@@ -42,6 +42,15 @@ export const getOverlapReport = () => request.get('/risk-exposure/overlap')
 export const syncOverlapHoldings = () => request.post('/risk-exposure/overlap/sync', {}, { timeout: 300000 })
 export const syncOverlapSingle = (code: string) => request.post(`/risk-exposure/overlap/sync/${code}`, {}, { timeout: 60000 })
 
+// P2.4 — 老基民工具集
+export const getHoldingMilestones = () => request.get('/toolbox/milestones')
+export const getQuarterlyDisclosure = () => request.get('/toolbox/quarterly-disclosure')
+export const getSwitchSavings = (params: { from_code: string; to_code: string; amount?: number; convert_fee_rate?: number }) =>
+  request.get('/toolbox/switch-savings', { params })
+export const getHolidayAlerts = () => request.get('/toolbox/holidays')
+export const getFeeHealth = () => request.get('/toolbox/fee-health')
+export const runMilestoneCheck = () => request.post('/toolbox/milestones/run-check')
+
 // P2.2 — 决策复盘
 export const getBehaviorBias = (month?: string) =>
   request.get('/decision-review/bias', { params: month ? { month } : {} })

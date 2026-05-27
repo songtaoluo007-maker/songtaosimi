@@ -24,6 +24,7 @@ const routes = [
   { path: '/ai-advisor', name: 'AiAdvisor', component: () => import('../views/AiAdvisor.vue'), meta: { title: 'AI 顾问' } },
   { path: '/ai-advisor/review', name: 'AdviceReview', component: () => import('../views/AdviceReview.vue'), meta: { title: 'AI 复盘' } },
   { path: '/risk-exposure', name: 'RiskExposure', component: () => import('../views/RiskExposure.vue'), meta: { title: '风险暴露' } },
+  { path: '/toolbox', name: 'ToolBox', component: () => import('../views/ToolBox.vue'), meta: { title: '老基民工具箱' } },
   { path: '/trades', name: 'Trades', component: () => import('../views/Trades.vue'), meta: { title: '交易记录' } },
   { path: '/capital-flow', name: 'CapitalFlow', component: () => import('../views/CapitalFlow.vue'), meta: { title: '资金流向' } },
   { path: '/settings', name: 'Settings', component: () => import('../views/Settings.vue'), meta: { title: '设置' } },

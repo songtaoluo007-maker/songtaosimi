@@ -74,8 +74,8 @@ a = Analysis(
         # P2 新增模块
         'backend.models.fund_fee', 'backend.models.user_decision_review',
         'backend.services.fund_fee_service_v3', 'backend.services.decision_review_service_v3',
-        'backend.services.ocr_reconcile_service_v3',
-        'backend.api.fund_fee_v3', 'backend.api.decision_review_v3',
+        'backend.services.ocr_reconcile_service_v3', 'backend.services.senior_toolbox_service_v3',
+        'backend.api.fund_fee_v3', 'backend.api.decision_review_v3', 'backend.api.senior_toolbox_v3',
     ] + _email_mods + _xml_mods + _html_mods + _fastapi_mods + _starlette_mods,
     hookspath=[],
     hooksconfig={},

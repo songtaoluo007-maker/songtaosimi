@@ -147,6 +147,24 @@ def job_sync_fund_managers():
         logger.warning(f"基金经理同步任务失败: {e}")
 
 
+def job_daily_milestone_check():
+    """P2.4 — 持仓里程碑/降费档每日检查（每个交易日 9:30 跑）"""
+    try:
+        from backend.database import SessionLocal
+        from backend.services.senior_toolbox_service_v3 import daily_milestone_check
+
+        db = SessionLocal()
+        try:
+            result = daily_milestone_check(db)
+            urgent_count = len(result.get("urgent", []))
+            if urgent_count:
+                logger.info(f"里程碑检查: {urgent_count} 只持仓近 3 天将降费")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"里程碑检查任务失败: {e}")
+
+
 def job_monthly_decision_review():
     """P2.2 — 月度决策复盘（每月 1 号 22:00 跑）"""
     try:

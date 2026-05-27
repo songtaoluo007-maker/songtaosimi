@@ -22,6 +22,50 @@ _（无）_
 
 ---
 
+## [2026-05-27（下午 13:40-13:58）] — P2.4 老基民工具箱接入 + 稳定性修复 ✅
+
+> **任务来源**：查看更新日志后继续推进 `senior-investor-upgrade-plan.md` § P2.4
+> **执行人**：Codex
+> **任务编号**：P2.4 / 稳定性优化
+> **回退方式**：git revert 本节文件；如只撤入口，退回 `App.vue` + `router/index.ts` 即可隐藏页面
+
+#### 13:40 ｜ `Codex` ｜ `ROUTE+PACKAGING`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `frontend/src/router/index.ts` | MOD | 新增 `/toolbox` 路由，接入 `ToolBox.vue` |
+| `frontend/src/App.vue` | MOD | 分析导航新增“老基民工具箱”入口 |
+| `scripts/fund_ai.spec` | MOD | 补充 `senior_toolbox_service_v3` / `senior_toolbox_v3` hidden imports，避免桌面包缺模块 |
+
+#### 13:48 ｜ `Codex` ｜ `BACKEND FIX`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/services/senior_toolbox_service_v3.py` | MOD | 抽出赎回费档解析 / 当前费率 / 下个降费档 helper，修复里程碑节省金额计算；季报披露持仓查询加 `joinedload`；基金转换结果增加同公司校验提示；节假日识别支持周末桥接成长假 |
+
+#### 13:55 ｜ `Codex` ｜ `TEST`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/tests/test_senior_toolbox.py` | NEW | 覆盖降费档节省金额、基金转换费用差额和公司不一致提示、费率体检高费率/缺配置、节假日周末桥接 |
+
+### 本次验证证据
+
+- `python -m py_compile backend\api\senior_toolbox_v3.py backend\services\senior_toolbox_service_v3.py backend\scheduler\jobs.py backend\scheduler\setup.py` → passed
+- `python -m pytest backend/tests/test_senior_toolbox.py -v` → 4 passed
+- `python -m pytest backend/tests/ -v` → 62 passed
+- `npm run build` → passed；仍保留已有 Vite chunk-size / 动态导入 warning
+- `pwsh -File scripts/build_desktop.ps1` → succeeded；重建 `dist\基金智能分析.exe`，424,601,455 bytes，LastWriteTime 2026-05-27 14:05:20
+- `git diff --check` → passed；仅 Git 输出 LF/CRLF 转换 warning
+
+### 后续协作者注意
+
+- P2.4 当前是“零新增表”的实用工具箱首版，依赖已有 holdings / fund_fee_schedules / fund_top_holdings / market_holidays.json。
+- “市场恐贪指数 + 你的情绪”尚未做外部热度接入；当前首版先上线 5 个本地数据可计算工具。
+- 仍建议用真实费率配置和真实持仓做业务验收，尤其是同公司转换费率各平台差异。
+
+---
+
 ## [2026-05-27（中午 12:00-12:16）] — P2.3 OCR 持仓闭环首版 ✅
 
 > **任务来源**：继续下一阶段优化，推进 `senior-investor-upgrade-plan.md` § P2.3

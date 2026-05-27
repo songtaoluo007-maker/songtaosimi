@@ -52,6 +52,7 @@ def init_scheduler():
         job_check_investment_plans,
         job_daily_fee_accrual,
         job_monthly_decision_review,
+        job_daily_milestone_check,
     )
 
     # A股指数行情 - 交易时间每5分钟
@@ -168,6 +169,13 @@ def init_scheduler():
         id="daily_fee_accrual", name="每日费率计提",
     )
 
+    # P2.4 — 持仓里程碑检查：每个交易日 09:30（短任务，飞书推送即将降费档的基金）
+    _scheduler.add_job(
+        job_daily_milestone_check,
+        CronTrigger(day_of_week="mon-fri", hour=9, minute=30),
+        id="daily_milestone_check", name="持仓里程碑检查",
+    )
+
     # P2.2 — 月度决策复盘：每月 1 号 22:00（长任务）
     def _trigger_monthly_review():
         _run_in_long_pool(job_monthly_decision_review)
@@ -249,6 +257,7 @@ def trigger_job_now(job_id: str) -> dict:
         "check_investment_plans": jobs.job_check_investment_plans,
         "daily_fee_accrual": jobs.job_daily_fee_accrual,
         "monthly_decision_review": jobs.job_monthly_decision_review,
+        "daily_milestone_check": jobs.job_daily_milestone_check,
     }
 
     func = job_func_map.get(job_id)

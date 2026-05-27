@@ -94,7 +94,7 @@ import { getOcrSyncStatus } from '@/api'
 import {
   DataAnalysis, Wallet, MagicStick, TrendCharts, Coin,
   Document, Camera, List, Setting, SwitchButton,
-  Histogram, Memo, RefreshRight, Calendar,
+  Histogram, Memo, RefreshRight, Calendar, Tools,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -112,6 +112,7 @@ const analysisNav = [
   { path: '/risk-exposure', label: '风险暴露', icon: Histogram },
   { path: '/ai-advisor/review', label: 'AI 复盘', icon: RefreshRight },
   { path: '/fee-ledger', label: '费率账本', icon: Coin },
+  { path: '/toolbox', label: '老基民工具箱', icon: Tools },
   { path: '/capital-flow', label: '资金流向', icon: Coin },
   { path: '/market', label: '行情监控', icon: TrendCharts },
   { path: '/news', label: '新闻资讯', icon: Document },

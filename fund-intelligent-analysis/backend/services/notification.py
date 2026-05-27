@@ -44,6 +44,61 @@ def _send_feishu(advice: dict) -> dict:
         return {"success": False, "error": str(e)}
 
 
+def send_milestone_alert(items: list[dict]) -> dict:
+    """P2.4 — 持仓里程碑/降费档提醒（每个交易日 9:30 检查）
+
+    items 形如 [{fund_code, fund_name, days_to_fee_drop, next_fee_rate, savings_at_fee_drop}, ...]
+    """
+    if not items or not settings.FEISHU_WEBHOOK_URL:
+        return {"feishu": None}
+
+    import requests
+
+    title = f"⏳ 持仓费率即将变化 · {len(items)} 只"
+    lines = ["**近 3 天即将跨过降费档：**", ""]
+    for it in items[:8]:
+        days = it.get("days_to_fee_drop", 0)
+        new_rate = it.get("next_fee_rate", 0)
+        savings = it.get("savings_at_fee_drop") or 0
+        lines.append(
+            f"• `{it.get('fund_code', '')}` {it.get('fund_name') or ''} — "
+            f"再持有 **{days} 天** 可降至 {new_rate*100:.2f}%，"
+            f"按当前市值约省 ¥{savings:,.2f}"
+        )
+    lines.append("")
+    lines.append("建议确认无紧急赎回需求时，过完降费档再卖出。")
+
+    card = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": "turquoise",
+            },
+            "elements": [
+                {"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}},
+                {"tag": "hr"},
+                {"tag": "note", "elements": [{
+                    "tag": "plain_text",
+                    "content": "⚡ 基金智能分析系统 · 老基民工具集",
+                }]},
+            ],
+        },
+    }
+    try:
+        resp = requests.post(settings.FEISHU_WEBHOOK_URL, json=card, timeout=10)
+        resp.raise_for_status()
+        body = resp.json()
+        if body.get("code") == 0:
+            logger.info(f"里程碑提醒已推送 ({len(items)} 只)")
+            return {"feishu": {"success": True}}
+        logger.warning(f"里程碑提醒推送失败: {body}")
+        return {"feishu": {"success": False, "error": body}}
+    except Exception as e:
+        logger.error(f"里程碑提醒推送异常: {e}")
+        return {"feishu": {"success": False, "error": str(e)}}
+
+
 def send_investment_reminder(items: list[dict]) -> dict:
     """P1.1 — 定投到期提醒（每日 9:00 跑）
 
