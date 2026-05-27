@@ -15,6 +15,7 @@ const routes = [
   { path: '/login', name: 'Login', component: () => import('../views/Login.vue'), meta: { public: true, title: '登录' } },
   { path: '/holdings', name: 'Holdings', component: () => import('../views/Holdings.vue'), meta: { title: '持仓管理' } },
   { path: '/investment-plans', name: 'InvestmentPlan', component: () => import('../views/InvestmentPlan.vue'), meta: { title: '定投计划' } },
+  { path: '/fee-ledger', name: 'FeeLedger', component: () => import('../views/FeeLedger.vue'), meta: { title: '费率账本' } },
   { path: '/ocr-import', name: 'OcrImport', component: () => import('../views/OcrImport.vue'), meta: { title: 'OCR导入' } },
   { path: '/market', name: 'Market', component: () => import('../views/Market.vue'), meta: { title: '行情' } },
   { path: '/market/detail/:symbol', name: 'MarketDetail', component: () => import('../views/MarketDetail.vue'), meta: { title: '行情详情' } },

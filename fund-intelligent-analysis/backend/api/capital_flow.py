@@ -1,6 +1,6 @@
 """机构/主力资金流向 API"""
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from datetime import date
 from backend.database import get_db
 from backend.models.capital_flow import CapitalFlow
@@ -68,7 +68,12 @@ def get_latest_flow(db: Session = Depends(get_db)):
 def get_holdings_flow_impact(db: Session = Depends(get_db)):
     """机构资金流对用户持仓的影响分析"""
     from backend.models.holding import Holding
-    holdings = db.query(Holding).filter(Holding.is_active == True).all()
+    holdings = (
+        db.query(Holding)
+        .options(joinedload(Holding.fund))
+        .filter(Holding.is_active == True)
+        .all()
+    )
     if not holdings:
         return {"message": "暂无持仓", "impact": []}
 

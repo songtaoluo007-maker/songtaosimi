@@ -147,6 +147,44 @@ def job_sync_fund_managers():
         logger.warning(f"基金经理同步任务失败: {e}")
 
 
+def job_monthly_decision_review():
+    """P2.2 — 月度决策复盘（每月 1 号 22:00 跑）"""
+    try:
+        from backend.database import SessionLocal
+        from backend.services.decision_review_service_v3 import run_full_review
+
+        db = SessionLocal()
+        try:
+            result = run_full_review(db)
+            logger.info(
+                f"月度决策复盘: 新增快照 {result.get('inserted', 0)} / "
+                f"回填 30d {result.get('reviewed', 0)} 条"
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"月度决策复盘失败: {e}")
+
+
+def job_daily_fee_accrual():
+    """P2.1 — 每日费率计提（每个交易日 21:00 跑）"""
+    try:
+        from backend.database import SessionLocal
+        from backend.services.fund_fee_service_v3 import daily_fee_accrual
+
+        db = SessionLocal()
+        try:
+            result = daily_fee_accrual(db)
+            logger.info(
+                f"费率计提完成: 新增 {result.get('inserted', 0)} / "
+                f"更新 {result.get('updated', 0)} / 跳过 {result.get('skipped', 0)}"
+            )
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"费率计提任务失败: {e}")
+
+
 def job_check_investment_plans():
     """P1.1 — 定投到期检查（每个交易日 09:00 跑，触发飞书提醒）"""
     try:

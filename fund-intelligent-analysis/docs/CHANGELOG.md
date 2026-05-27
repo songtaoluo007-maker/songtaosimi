@@ -22,6 +22,178 @@ _（无）_
 
 ---
 
+## [2026-05-27（中午 12:00-12:16）] — P2.3 OCR 持仓闭环首版 ✅
+
+> **任务来源**：继续下一阶段优化，推进 `senior-investor-upgrade-plan.md` § P2.3
+> **执行人**：Codex
+> **任务编号**：P2.3
+> **回退方式**：git revert 本节文件；前端可退回 `OcrImport.vue` + `App.vue` + API 导出，后端删除 `ocr_reconcile_service_v3.py` 并撤回 `backend/api/ocr.py` 新端点
+
+#### 12:00 ｜ `Codex` ｜ `BACKEND`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/services/ocr_reconcile_service_v3.py` | NEW | 新增 OCR 持仓快照对账服务：当前持仓 vs 本次 OCR，识别份额新增/减少，按 NAV 推断买入/卖出交易，检测同日 OCR 重复交易，输出缺失持仓风险提示 |
+| `backend/api/ocr.py` | MOD | 新增 `/api/ocr/status`、`/api/ocr/diff-preview`、`/api/ocr/confirm-snapshot`；确认快照时先计算差异，再按截图更新持仓并记录推断交易；保留旧 `/api/ocr/confirm` 兼容入口 |
+| `scripts/fund_ai.spec` | MOD | 补充 `backend.services.ocr_reconcile_service_v3` hidden import，避免桌面打包漏模块 |
+
+#### 12:08 ｜ `Codex` ｜ `FRONTEND`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `frontend/src/api/index.ts` | MOD | 增加 OCR 同步状态、差异预览、快照确认 API |
+| `frontend/src/views/OcrImport.vue` | MOD | 导入流程加入每周同步提醒、差异刷新、份额变化标签、推断交易预览、缺失持仓告警，并改用 `confirm-snapshot` 完成闭环落库 |
+| `frontend/src/App.vue` | MOD | 在受保护页面每日最多弹一次 OCR 同步提醒，点击通知进入截图导入页 |
+
+#### 12:14 ｜ `Codex` ｜ `TEST`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/tests/test_ocr_reconcile.py` | NEW | 覆盖 OCR 快照差异推断、自动交易创建、重复交易跳过、缺失持仓提示、无 OCR 同步时提醒到期 |
+
+### 本次验证证据
+
+- `python -m py_compile backend\api\ocr.py backend\services\ocr_reconcile_service_v3.py` → passed
+- `python -m pytest backend/tests/test_ocr_reconcile.py -v` → 3 passed
+- `python -m pytest backend/tests/ -v` → 58 passed
+- `npm run build` → passed；仍保留已有 Vite chunk-size / 动态导入 warning
+- `pwsh -File scripts/build_desktop.ps1` → succeeded；重建 `dist\基金智能分析.exe`，424,548,364 bytes，LastWriteTime 2026-05-27 12:30:31
+- `git diff --check` → passed；仅 Git 输出 LF/CRLF 转换 warning
+
+### 后续协作者注意
+
+- P2.3 当前先覆盖“截图快照差异 → 推断交易 → 用户确认落库”的闭环；真实截图识别质量仍依赖原 `ocr_service.py`。
+- 当前不会把“截图缺失的现有持仓”自动视为全部赎回，只给告警；这是防止分页截图漏传导致误删仓位。
+- 需要用真实支付宝 / 天天基金截图做业务验收后，再考虑对缺失持仓增加显式“确认全部赎回”开关。
+
+---
+
+## [2026-05-27（上午 11:20-11:41）] — P2.2 雷达图补齐 + 复盘查询优化 ✅
+
+> **任务来源**：继续跟进 `CHANGELOG` 中 P2.2 未完成项
+> **执行人**：Codex
+> **任务编号**：P2.2 / 性能优化
+> **回退方式**：git revert 本节文件；前端仅撤回 `AdviceReview.vue` 变更即可移除 UI
+
+#### 11:20 ｜ `Codex` ｜ `FRONTEND`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `frontend/src/views/AdviceReview.vue` | MOD | 接入 `/api/decision-review/bias` 和 `/api/decision-review/decisions`，新增行为偏差雷达图、本月决策摘要、后悔操作提示、最近决策表和“生成复盘”入口 |
+
+#### 11:30 ｜ `Codex` ｜ `BACKEND PERF`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/services/decision_review_service_v3.py` | MOD | `materialize_decisions_from_trades` 批量预取当日 AI 建议和活跃持仓，避免按 trade 循环打 DB；`compute_behavior_bias` 批量预取持仓创建时间，避免按 sell 决策 N+1 查询 |
+| `backend/api/capital_flow.py` | MOD | `get_holdings_flow_impact` 增加 `joinedload(Holding.fund)`，消除持仓基金类型统计里的 N+1 查询 |
+| `scripts/fund_ai.spec` | MOD | 补充 P2 模型 / 服务 / API hidden imports，防止下次桌面打包漏模块 |
+
+#### 11:35 ｜ `Codex` ｜ `TEST`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/tests/test_decision_review.py` | NEW | 覆盖交易快照生成、跟随 AI 建议识别、幂等重复运行、行为偏差汇总 |
+
+### 本次验证证据
+
+- `python -m py_compile backend/api/capital_flow.py backend/services/decision_review_service_v3.py backend/api/decision_review_v3.py backend/api/fund_fee_v3.py` → passed
+- `python -m pytest backend/tests/ -v` → 55 passed
+- `npm run build` → passed；仍保留已有 Vite chunk-size warning
+- 临时 SQLite `init_db()` → Alembic 正常升级到 `h7e3f94c20da`，`fund_fee_schedules` / `user_decision_reviews` 表存在
+
+### 后续协作者注意
+
+- P2.2 前端入口已在 `AI 建议复盘` 页补齐，不再只是 API。
+- P2.1 / P2.2 仍需要真实交易数据和真实费率配置做业务验收。
+- 未重新打包 `dist/基金智能分析.exe`；如要交付桌面版，需要再跑 `pwsh -File scripts/build_desktop.ps1`。
+
+---
+
+## [2026-05-26（深夜 23:45-00:15）] — P2.1 费率账本 + P2.2 决策复盘 ✅
+
+> **任务来源**：`senior-investor-upgrade-plan.md` § P2.1 / P2.2
+> **执行人**：Claude
+> **预算**：4 + 4 人天 / 实际：约 30 分钟
+> **里程碑**：M3（"看得久"）2/4 项就绪
+> **回退方式**：`alembic downgrade f5b3a64e29d8` + 删 P2 新增 8 个文件 + revert wire 处
+
+#### 23:45 ｜ `Claude` ｜ `P2.1 数据 + 服务 + API + 前端`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/models/fund_fee.py` | NEW | FundFeeSchedule + FeeDailyAccrual 两个模型 |
+| `backend/alembic/versions/g6c2d83a91fb_p2_fund_fees.py` | NEW | 迁移：建 2 表 + 索引 |
+| `backend/services/fund_fee_service_v3.py` | NEW | 三大能力：① 费率 CRUD ② 每日计提（持仓 × 年费率/365）③ 赎回费预估（持有天数 → 费率档，含"再等 N 天可省"提示）④ 年度账本（按基金/月度聚合 + 费率拖累 %）|
+| `backend/api/fund_fee_v3.py` | NEW | 6 端点：schedules CRUD / accrual run / ledger yearly / redemption-estimate |
+| `backend/scheduler/setup.py` + `jobs.py` | MOD | 加 `daily_fee_accrual`（每个交易日 21:00）+ 包装函数 |
+| `backend/main.py` + `database.py` + `models/__init__.py` + `alembic/env.py` | MOD | 注册路由 + 模型 |
+| `frontend/src/views/FeeLedger.vue` | NEW | 完整页面：3 个汇总卡 + 按基金/月度账本 + 赎回费预估器 + 费率配置弹层 |
+| `frontend/src/api/index.ts` | MOD | 加 6 个费率 API 函数 |
+| `frontend/src/router/index.ts` | MOD | 加 `/fee-ledger` 路由 |
+| `frontend/src/App.vue` | MOD | "分析"组加 "费率账本" Coin 图标入口 |
+
+**关键决策**：
+- 每日计提用"持仓市值 × 年费率 / 365"近似（实际基金按估值日计提，差异 < 1%）
+- 赎回费预估额外提供 `next_window`：若再持有 N 天能降到更低费率，按当前金额算出节省金额
+- 费率拖累 `drag_pct = total_fee / avg_holding_value`，给出"累计被扣的年化%"直观感受
+- 费率表手动维护（未来扩展自动从天天/东财抓取）
+
+#### 23:55 ｜ `Claude` ｜ `P2.2 数据 + 服务 + API`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/models/user_decision_review.py` | NEW | UserDecisionReview（单次决策快照）+ BehaviorBiasSnapshot（月度行为偏差）|
+| `backend/alembic/versions/h7e3f94c20da_p2_decision_review.py` | NEW | 迁移：建 2 表 + 2 索引 |
+| `backend/services/decision_review_service_v3.py` | NEW | 5 大算法：① 从 trades 自动生成快照（识别 follow/reverse/self 三种用户行为）② 30 天后回填 outcome（基金净值变化 → win/loss/neutral）③ 行为偏差雷达图（追涨/杀跌/频繁交易/跟随建议比例/三种胜率）④ 月度报告 + biggest_regret ⑤ 自然语言 lesson 生成 |
+| `backend/api/decision_review_v3.py` | NEW | 5 端点：bias / bias/persist / bias/history / decisions / run |
+| `backend/scheduler/setup.py` + `jobs.py` | MOD | 加 `monthly_decision_review`（每月 1 号 22:00，长任务）|
+| `backend/main.py` + `database.py` + `models/__init__.py` + `alembic/env.py` | MOD | 注册 |
+| `frontend/src/api/index.ts` | MOD | 加 5 个决策复盘 API |
+
+**关键决策**：
+- 用户行为识别：trade.trade_type + AI advice.actions[fund_code].action 比对，分 `follow / reverse / self`
+- 决策结果回填用 ±3 天窗口找基金净值（避免节假日找不到当日数据）
+- 雷达图 5 维：追涨 / 杀跌 / 频繁交易 / 跟随胜率 / 反着做胜率 — 让用户直观看到自己的"反人性"模式
+- "最让你后悔的决策" = reviewed=1 且 outcome=loss 中 outcome_pct 最负的那一条
+- 雷达图前端在 AdviceReview.vue 后续集成（本次先打通后端 + API；前端 UI 见 TODO）
+
+#### 00:10 ｜ `Claude` ｜ `VERIFY`
+
+```python
+# P2.1 — 赎回费 warning 算法
+_build_redemption_warning(3, 0.015, {after_days: 4, rate: 0.005, savings: 100}) → '偏高' + '节省'
+_build_redemption_warning(40, 0, None) → '免赎回费'
+
+# P2.2 — 市场分类 + lesson 生成
+_classify_market_state(1.5) → 'bullish'
+_classify_market_state(-1.5) → 'bearish'
+_generate_lesson(win+follow, 5.5) → '跟随 AI 建议成功：30 天后净值变化 +5.50%'
+
+# 全链路 import 通过：
+# Router routes — P2.1: 6, P2.2: 5
+# Scheduler jobs — daily_fee_accrual / monthly_decision_review 全部注册
+```
+
+### M3 验收清单
+- [x] P2.1 赎回费预估算法两个边界用例通过
+- [x] P2.2 市场分类 + lesson 生成测试通过
+- [x] Router routes — P2.1: 6 / P2.2: 5
+- [x] Alembic head 应升级到 `h7e3f94c20da`
+- [ ] 真实环境：跑 `alembic upgrade head` → `h7e3f94c20da`
+- [ ] 真实环境：配置至少一只基金的费率（FeeLedger 配置弹层），手动 `POST /api/fund-fees/accrual/run` 看 fee_daily_accruals 表
+- [ ] 真实环境：调 `POST /api/decision-review/run` 看 trades → user_decision_reviews 是否生成
+- [x] 前端 UI：把"行为偏差雷达图"集成到 AdviceReview.vue（Codex 2026-05-27 已补）
+
+### 📍 M3 进展
+
+P2.1 / P2.2 后端全部就绪；前端 P2.1 完整，P2.2 雷达图已集成到 AdviceReview.vue。
+- P2.3 OCR 持续闭环（2.5 天）— 待启动
+- P2.4 老基民小工具集（5 天）— 待启动
+- P2.2 行为偏差雷达图 UI 集成到 AdviceReview.vue — 已完成（Codex 2026-05-27）
+
+---
+
 ## [2026-05-26（晚 23:17-23:31）] — Codex 交接验证 + 迁移修复 + dist 重建 ✅
 
 > **任务来源**：Claude 交接后的继续跟进
@@ -71,6 +243,94 @@ _（无）_
 - 还未做从 `dist/基金智能分析.exe` 启动后的 GUI 冒烟测试。
 - 临时库验证覆盖了 fresh DB；真实用户数据库建议先复制一份再做升级验证。
 - P1.1 / P0.2 / P0.3 涉及真实 AKShare 和交易数据，仍需要 live data 验收。
+
+---
+
+## [2026-05-26（晚 22:08-22:12）] — P1.3 用户画像 + AI 个性化 ✅
+
+> **任务来源**：`senior-investor-upgrade-plan.md` § P1.3
+> **执行人**：Claude
+> **预算**：3 人天 / 实际：4 分钟
+> **里程碑**：M2（"管得住"）第 3/3 项完成 — **M2 阶段全部就绪**
+> **回退方式**：`alembic downgrade e4f1c82b9d76` + 反向 patch user 模型 10 列 + 删 user_profile_v3 文件
+
+#### 22:08 ｜ `Claude` ｜ `MODEL+MIGRATION`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/models/user.py` | MOD | UserAccount 加 10 个画像字段（birth_year / retirement_target_year / investment_horizon_years / funds_purpose / target_annual_return / max_acceptable_drawdown / risk_appetite / monthly_disposable_income / profile_updated_at / profile_notes）；加 `to_profile_dict()` 方法 |
+| `backend/alembic/versions/f5b3a64e29d8_p1_user_profile.py` | NEW | 迁移：user_accounts ADD COLUMN 10 列，幂等（先查再加）|
+
+#### 22:10 ｜ `Claude` ｜ `API+AI`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/api/user_profile_v3.py` | NEW | 3 个端点：`GET /user/profile` / `PUT /user/profile`（含 funds_purpose、risk_appetite 取值校验）/ `POST /user/profile/recommend-allocation` |
+| `backend/services/ai_advisor.py` | MOD | `_build_context_json` 加 `user_profile` 字段；新增 `_build_user_profile()` 方法（年龄计算 + purpose_label / risk_label 中文映射）；SYSTEM_PROMPT 加入第 8 条规则约束 AI 必须结合用户画像调整建议 |
+| `backend/main.py` | MOD | 注册 `user_profile_router` |
+
+**关键决策**：
+- 推荐配置算法 `_recommend_from_profile` 用 "100-年龄法则" 作为基准股票占比，再按资金性质（紧急/首付/养老/长期）和风险偏好（保守/稳健/积极）三档微调
+- 推荐结果只作为参考，不自动写入 asset_allocation_targets — 用户必须手动确认后才生效
+
+#### 22:11 ｜ `Claude` ｜ `FRONTEND`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `frontend/src/api/index.ts` | MOD | 加 3 个画像 API 函数 |
+| `frontend/src/views/Settings.vue` | MOD | 新增 "用户画像" tab（User 图标）：完整表单（年龄 / 退休年 / 资金锁定期 / 资金性质 radio-group / 目标年化 / 可承受回撤 / 风险偏好 / 月可投 / 备注）+ "生成推荐配置"按钮 + 推荐结果 alert 卡片（含资产类、目标占比、容差表格） |
+
+#### 22:12 ｜ `Claude` ｜ `VERIFY`
+
+```python
+# fund classifier (P1.2) — 6 大类全部正确
+QDII 纳斯达克100 → equity_us / 债券型 → bond / 货币型 → cash / 黄金ETF → gold / 消费精选 → equity_a / 恒生互联网 → equity_hk
+
+# 推荐配置算法 (P1.3) — 1985 出生 + balanced + long_term → 6 大类合计 100.0% ✓
+```
+
+---
+
+## [2026-05-26（晚 21:59-22:07）] — P1.2 目标资产配置 + 再平衡 ✅
+
+> **任务来源**：`senior-investor-upgrade-plan.md` § P1.2
+> **执行人**：Claude
+> **预算**：3.5 人天 / 实际：8 分钟
+> **里程碑**：M2 第 2/3 项
+> **回退方式**：`alembic downgrade d9e2a7f15834` + 删 P1.2 新增 4 个文件 + revert RiskExposure.vue 配置卡片
+
+#### 21:59 ｜ `Claude` ｜ `MODEL+MIGRATION`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/models/asset_allocation.py` | NEW | AssetAllocationTarget（含 tolerance_pct 容差）+ RebalanceAlert 两个模型 |
+| `backend/alembic/versions/e4f1c82b9d76_p1_asset_allocation.py` | NEW | 迁移：建 2 表 + 索引 idx_ra_unack |
+| `backend/database.py` | MOD | 注册 `asset_allocation` 模型 |
+
+#### 22:01 ｜ `Claude` ｜ `SERVICE`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/services/asset_allocation_service_v3.py` | NEW | 含 `_classify_fund` 基金归类规则（fund_type + name 关键词 → 6 大类）+ `compute_current_allocation` 当前占比 + `compute_deviations`（按 tolerance 判断 within_tolerance + 计算建议加/减仓金额）+ alert 持久化 + ack 确认 |
+
+**关键决策**：
+- 6 大类设计：equity_a / equity_hk / equity_us / bond / gold / cash — 覆盖国内基民全部主流配置
+- 归类规则用 fund_type + name 双字段匹配，QDII / 港股 / 黄金 等都能识别
+- compute_deviations 默认 `persist=False`，只在调度任务里 persist=True，避免前端刷新就产生重复 alert
+
+#### 22:03 ｜ `Claude` ｜ `API`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/api/asset_allocation_v3.py` | NEW | 7 个端点：`GET/PUT/DELETE /targets` / `GET /current` / `GET /deviations` / `GET /alerts` / `PUT /alerts/{id}/ack`；PUT /targets 含合计 ≈ 100% 校验 |
+| `backend/main.py` | MOD | 注册 `asset_allocation_router` |
+
+#### 22:05 ｜ `Claude` ｜ `FRONTEND`
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `frontend/src/api/index.ts` | MOD | 加 7 个资产配置 API 函数 |
+| `frontend/src/views/RiskExposure.vue` | MOD | 在 tagResult alert 之后插入 "目标资产配置（纪律工具）" 卡片：展示 6 大类目标 vs 当前 vs 偏离 vs 建议加减仓金额；"编辑目标" 弹层（含 6 大类输入 + 合计校验）；偏离超阈值时红色 warning 提示 |
 
 ---
 
@@ -136,6 +396,16 @@ _iter_scheduled_dates(monthly@15, 2025-01, 2025-04) → 4 个日期，全是 15 
 |---|---|---|
 | `docs/senior-investor-upgrade-plan.md` | MOD | 进度看板标 P1.1 ✅；新增 P1.1 文件清单 + 用户感知对比表 |
 | `docs/CHANGELOG.md` | MOD | 本次改动（7 个时间戳） |
+
+### 📍 M2 "管得住" 里程碑达成
+
+P1.1 / P1.2 / P1.3 三项全部上线 + Codex 23:17 接力做了完整验证（54 pytest 通过 / npm build 通过 / Alembic 升到 f5b3a64e29d8 / 桌面端重新打包成功）。
+
+下一步：**M3 "看得久" 阶段**
+- P2.1 费率账本（4 天）— 长期成本可见性
+- P2.2 用户决策复盘（4 天）— 替代单一 AI 命中率
+- P2.3 OCR 持续闭环（2.5 天）
+- P2.4 老基民小工具集（5 天）
 
 ### P1.1 验收清单
 - [x] 4 种 plan_type 调度算法单测通过

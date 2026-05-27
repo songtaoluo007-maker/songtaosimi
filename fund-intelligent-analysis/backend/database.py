@@ -54,7 +54,7 @@ def get_db():
 def init_db():
     """初始化数据库：创建表 + 运行迁移 + 清洗数据"""
     # 导入所有模型以确保它们被注册
-    from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group, user, capital_flow, ai_advice_review, fund_tag, portfolio_snapshot, fund_manager, fund_top_holding, investment_plan, asset_allocation  # noqa: F401
+    from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group, user, capital_flow, ai_advice_review, fund_tag, portfolio_snapshot, fund_manager, fund_top_holding, investment_plan, asset_allocation, fund_fee, user_decision_review  # noqa: F401
 
     # create_all 处理全新部署（幂等：已有表不重复创建）
     Base.metadata.create_all(bind=engine)

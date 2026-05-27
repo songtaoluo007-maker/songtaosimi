@@ -9,7 +9,7 @@ V2 改动：
 import os
 import uuid
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
@@ -104,9 +104,22 @@ class OcrConfirmItem(BaseModel):
     source: str = "ocr"
 
 
-@router.post("/confirm")
-def confirm_ocr_result(items: list[OcrConfirmItem], db: Session = Depends(get_db)):
-    """用户确认 OCR 持仓结果，写入持仓表（与 v1 相同逻辑，仅整理可读性）"""
+class OcrSnapshotDiffRequest(BaseModel):
+    items: list[OcrConfirmItem]
+    trade_date: Optional[str] = None
+
+
+class OcrSnapshotConfirmRequest(BaseModel):
+    items: list[OcrConfirmItem]
+    trade_date: Optional[str] = None
+    generate_trades: bool = True
+
+
+def _items_to_dicts(items: list[OcrConfirmItem]) -> list[dict[str, Any]]:
+    return [item.model_dump() for item in items]
+
+
+def _upsert_holding_items(items: list[OcrConfirmItem], db: Session) -> list[dict[str, str]]:
     from backend.models.fund import Fund
     from backend.models.holding import Holding
 
@@ -212,8 +225,58 @@ def confirm_ocr_result(items: list[OcrConfirmItem], db: Session = Depends(get_db
 
         created.append({"fund_code": fund_code, "fund_name": fund_name})
 
+    return created
+
+
+@router.get("/status")
+def get_ocr_status(db: Session = Depends(get_db)):
+    """OCR 持仓同步状态，用于每周截图更新提醒。"""
+    from backend.services.ocr_reconcile_service_v3 import get_ocr_sync_status
+
+    return get_ocr_sync_status(db)
+
+
+@router.post("/diff-preview")
+def preview_ocr_snapshot_diff(payload: OcrSnapshotDiffRequest, db: Session = Depends(get_db)):
+    """预览本次 OCR 持仓快照与当前持仓的差异，并推断交易记录。"""
+    from backend.services.ocr_reconcile_service_v3 import build_snapshot_diff
+
+    return build_snapshot_diff(db, _items_to_dicts(payload.items), payload.trade_date)
+
+
+@router.post("/confirm")
+def confirm_ocr_result(items: list[OcrConfirmItem], db: Session = Depends(get_db)):
+    """用户确认 OCR 持仓结果，写入持仓表（兼容旧流程，不自动生成交易）"""
+    created = _upsert_holding_items(items, db)
     db.commit()
     return {"message": f"成功导入 {len(created)} 只基金持仓", "created": created}
+
+
+@router.post("/confirm-snapshot")
+def confirm_ocr_snapshot(payload: OcrSnapshotConfirmRequest, db: Session = Depends(get_db)):
+    """用户确认 OCR 持仓快照，先计算差异，再按截图更新持仓并记录推断交易。"""
+    from backend.services.ocr_reconcile_service_v3 import (
+        build_snapshot_diff,
+        create_inferred_trades,
+        get_ocr_sync_status,
+    )
+
+    item_dicts = _items_to_dicts(payload.items)
+    diff = build_snapshot_diff(db, item_dicts, payload.trade_date)
+    created = _upsert_holding_items(payload.items, db)
+    trade_result = (
+        create_inferred_trades(db, diff)
+        if payload.generate_trades
+        else {"created": [], "skipped": [], "created_count": 0, "skipped_count": 0}
+    )
+    db.commit()
+    return {
+        "message": f"成功同步 {len(created)} 只基金持仓，生成 {trade_result['created_count']} 条推断交易",
+        "created": created,
+        "trades": trade_result,
+        "diff": diff,
+        "sync_status": get_ocr_sync_status(db),
+    }
 
 
 @router.post("/upload-trades")
