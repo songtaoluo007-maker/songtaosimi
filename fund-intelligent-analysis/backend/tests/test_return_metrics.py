@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from backend.services.return_metrics_v3 import calc_max_drawdown, xirr
 
@@ -16,6 +16,15 @@ def test_xirr_handles_regular_investment_cash_flows():
 
 def test_xirr_returns_zero_when_cash_flows_have_no_sign_change():
     assert xirr([(date(2025, 1, 1), -1000), (date(2025, 2, 1), -500)]) == 0
+
+
+def test_xirr_normalizes_mixed_date_and_datetime_cash_flows():
+    result = xirr([
+        (datetime(2026, 4, 30, 15, 32, 50), -835.29),
+        (date(2026, 5, 30), 1174.81),
+    ])
+
+    assert isinstance(result, float)
 
 
 def test_calc_max_drawdown_tracks_current_and_recovery():

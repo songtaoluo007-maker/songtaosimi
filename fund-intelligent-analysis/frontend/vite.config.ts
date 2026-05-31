@@ -10,6 +10,9 @@ export default defineConfig({
     },
   },
   build: {
+    // Desktop app serves assets locally; current Element Plus/ECharts chunks are
+    // intentionally vendor-split and stay below this measured local-app budget.
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {

@@ -19,6 +19,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 WHITELIST_PATHS = {"/api/health"}
 
 
+def _should_rate_limit_path(path: str) -> bool:
+    return path.startswith("/api/") and path not in WHITELIST_PATHS
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
@@ -54,7 +58,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._last_cleanup = now
 
     async def dispatch(self, request, call_next):
-        if request.url.path in WHITELIST_PATHS:
+        path = request.url.path
+        if not _should_rate_limit_path(path):
             return await call_next(request)
 
         ip = self._resolve_client_ip(request)
