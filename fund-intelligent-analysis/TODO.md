@@ -1,6 +1,6 @@
 # Project Tasks
 
-> Last updated: 2026-05-31 15:08 +08:00
+> Last updated: 2026-05-31 19:59 +08:00
 > Purpose: handoff markers for the Claude -> Codex optimization work. Keep new follow-up items here unless they belong in a more specific roadmap document.
 
 ## Current Handoff Status
@@ -21,6 +21,7 @@
 - [x] [high] [runtime] Fixed desktop/API smoke-test regressions found on copied real DB: static assets no longer count toward API rate limit, and XIRR now normalizes mixed `date` / `datetime` cash-flow dates. (completed: 2026-05-31)
 - [x] [high] [packaging] Rebuilt `dist/基金智能分析.exe`; output size 424,684,570 bytes, timestamp 2026-05-31 15:01:27. (completed: 2026-05-31)
 - [x] [high] [runtime] GUI smoke test from the rebuilt EXE passed: login, Dashboard, Holdings, Risk Exposure, Investment Plans, Settings user profile, Toolbox, OCR Import; report `data/validation/gui_smoke_20260531_150222.json`. (completed: 2026-05-31)
+- [x] [medium] [branding] Replaced the desktop/frontend brand icon with the user-selected second blue-white candlestick version; regenerated PNG sizes 16/24/32/48/64/128/192/256/512 and multi-size ICO. (completed: 2026-05-31)
 
 ## High
 
@@ -69,3 +70,6 @@
 - 2026-05-31 `npm run build` -> passed; previous large chunk warnings for `element-plus` / `echarts` suppressed by measured desktop budget, only static/dynamic import notices remain.
 - 2026-05-31 `pwsh -File scripts/build_desktop.ps1` -> succeeded; rebuilt `dist/基金智能分析.exe` (424,684,570 bytes, LastWriteTime 2026-05-31 15:01:27).
 - 2026-05-31 rebuilt EXE GUI smoke -> passed; login + Dashboard + Holdings + Risk Exposure + Investment Plans + Settings user profile + Toolbox + OCR Import, no 429/500/page errors.
+- 2026-05-31 branding `python scripts/generate_brand_assets.py` -> succeeded; regenerated icon assets from `assets/fund-ai-source.png`.
+- 2026-05-31 branding `npm run build` (frontend) -> passed; only existing Vite static/dynamic import notices.
+- 2026-05-31 branding `pwsh -File scripts/build_desktop.ps1` -> succeeded after stopping two running old EXE processes that locked the target; rebuilt `dist/基金智能分析.exe` (425,711,512 bytes, LastWriteTime 2026-05-31 20:11:58).
