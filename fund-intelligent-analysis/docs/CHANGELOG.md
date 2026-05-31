@@ -22,6 +22,30 @@ _（无）_
 
 ---
 
+## [2026-05-31（晚间）] — 品牌图标替换与桌面重建
+
+> **任务来源**：用户选定第二版蓝白蜡烛图图标
+> **执行人**：Codex
+> **任务编号**：branding / packaging
+> **回退方式**：git revert 本节文件；本地旧图标备份在 `data/icon_backup_20260531_195918/`
+
+| 文件 / 产物 | 类型 | 概要 |
+|---|---|---|
+| `assets/fund-ai-source.png` | NEW | 保存用户确认的第二版蓝白蜡烛图源图，作为后续再生成品牌图标的单一来源 |
+| `assets/fund-ai-16.png` ~ `assets/fund-ai-512.png` | MOD/NEW | 从源图重新生成品牌 PNG；补齐 manifest 已引用的 192 / 512 尺寸 |
+| `assets/fund-ai.ico` | MOD | 重新生成 Windows 多尺寸 ICO，供 PyInstaller、桌面窗口和快捷方式使用 |
+| `scripts/generate_brand_assets.py` | MOD | 改为从 `assets/fund-ai-source.png` 派生所有 PNG / ICO，避免后续重跑脚本恢复旧图标 |
+| `TODO.md` | MOD | 新增 branding 完成标记和验证记录 |
+
+### 本次验证证据
+
+- `python scripts/generate_brand_assets.py` → succeeded；生成 16/24/32/48/64/128/192/256/512 PNG + ICO
+- `npm run build`（`frontend/`）→ passed；仅保留既有 Vite static/dynamic import notices
+- `pwsh -File scripts/build_desktop.ps1` → first attempt blocked by two running old EXE processes (`17080`, `25720`); stopped those project-local processes and reran successfully
+- Rebuilt `dist\基金智能分析.exe` → 425,711,512 bytes，LastWriteTime 2026-05-31 20:11:58
+
+---
+
 ## [2026-05-31（下午）] — 真实库副本验收 + 桌面烟测修复 ✅
 
 > **任务来源**：继续完成 `TODO.md` 剩余优化 / 验收项
