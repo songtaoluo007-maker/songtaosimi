@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date
+from datetime import date, datetime
 from statistics import mean, pstdev
 
 from loguru import logger
@@ -22,6 +22,8 @@ def _f(value) -> float:
 
 
 def _as_date(value) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
     if isinstance(value, date):
         return value
     if hasattr(value, "date"):
@@ -35,7 +37,12 @@ def xirr(cash_flows: list[tuple[date, float]]) -> float:
     Buy/cost flows are negative, sell/final value flows are positive. The return
     value is a decimal rate, e.g. 0.083 means 8.3%.
     """
-    flows = sorted((d, amt) for d, amt in cash_flows if d and amt)
+    flows = sorted(
+        (day, amt)
+        for d, amt in cash_flows
+        for day in [_as_date(d)]
+        if day and amt
+    )
     if len(flows) < 2:
         return 0.0
     if not any(amt < 0 for _, amt in flows) or not any(amt > 0 for _, amt in flows):
@@ -68,7 +75,12 @@ def xirr(cash_flows: list[tuple[date, float]]) -> float:
 
 
 def calc_max_drawdown(daily_values: list[tuple[date, float]]) -> dict:
-    values = sorted((d, v) for d, v in daily_values if d and v is not None)
+    values = sorted(
+        (day, v)
+        for d, v in daily_values
+        for day in [_as_date(d)]
+        if day and v is not None
+    )
     if not values:
         return {
             "max_dd": 0.0,

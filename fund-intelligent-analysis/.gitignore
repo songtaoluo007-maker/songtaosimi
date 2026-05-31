@@ -5,8 +5,15 @@ data/
 __pycache__/
 *.pyc
 .env
+.env.*backup
 node_modules/
 dist/
 .venv/
 *.log
 backend/.installed
+
+# PyInstaller 中间产物（每次打包重新生成，不入 Git）
+build/
+
+# Claude Code / Codex 本地缓存（与项目无关）
+.agents/

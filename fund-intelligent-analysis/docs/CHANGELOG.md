@@ -22,6 +22,95 @@ _（无）_
 
 ---
 
+## [2026-05-31（下午）] — 真实库副本验收 + 桌面烟测修复 ✅
+
+> **任务来源**：继续完成 `TODO.md` 剩余优化 / 验收项
+> **执行人**：Codex
+> **任务编号**：runtime-validation / perf-stability / handoff
+> **回退方式**：git revert 本节文件；本次不写入原始 `data/fund_quant.db`
+
+#### 真实库副本验收
+
+| 文件 / 产物 | 类型 | 概要 |
+|---|---|---|
+| `data/validation/fund_quant_validation_20260530_112919.db` | LOCAL | 从 `data/fund_quant.db` 复制出的验证库，仅本地使用，不入 Git |
+| `data/validation/remaining_plan_validation_20260530_112919.json` | LOCAL | 记录真实库副本升级、定投计划、OCR diff、工具箱路径验证结果 |
+| `data/validation/live_sync_all_holdings_20260531_150449.json` | LOCAL | 记录全持仓 live sync：基金经理 22/22、前十大持股 21/22（`015283` AKShare 无返回） |
+| `data/validation/gui_smoke_20260531_150222.json` | LOCAL | 记录重建 EXE 后 GUI 烟测：登录 + 7 个关键页面，无 429/500/page error |
+
+#### 代码修复
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/middleware/rate_limit.py` | MOD | 限流只统计 `/api/*` 且排除白名单；静态资源、SPA 页面、品牌图不再消耗 API 限流额度，修复桌面端快速切页触发 429 |
+| `backend/middleware/rate_limit_v2.py` | MOD | 同步上述 V2 镜像文件，避免后续协作者从 `_v2` 回切时丢修复 |
+| `backend/services/return_metrics_v3.py` | MOD | XIRR / 回撤输入统一归一成 `date`，修复真实老持仓 `created_at=datetime` 与 `date.today()` 混排导致 Dashboard 500 |
+| `backend/tests/test_return_metrics.py` | MOD | 新增混合 `date` / `datetime` XIRR 回归用例 |
+| `backend/tests/test_rate_limit_middleware.py` | NEW | 覆盖 API 限流路径判断：`/api/holdings` 限制，`/api/health` / `/assets/*` / `/brand-assets/*` 不限制 |
+| `frontend/vite.config.ts` | MOD | 设置本地桌面应用的 vendor chunk 预算 `chunkSizeWarningLimit=1000`，保留当前 Element Plus / ECharts 手工分包 |
+| `TODO.md` | MOD | 把可自动完成项标记完成；把缺真实截图/真实费率数据的项标成 blocked，方便后续协作者接力 |
+
+### 本次验证证据
+
+- `python -m pytest backend/tests/test_return_metrics.py backend/tests/test_rate_limit_middleware.py -v` → 5 passed
+- 真实库副本验证 → DB upgrade passed；定投 90 天执行行 + reconcile passed；OCR diff / duplicate skip / missing holding service path passed；P2.4 工具箱路径 passed（源库无 fee schedules，因此在副本临时种入验证费率）
+- Live sync on copied DB → fund managers checked 22/22，top holdings checked 22/22，success 21，`015283` AKShare 未返回数据
+- `npm run build` → passed；Element Plus / ECharts 大 chunk warning 已按桌面预算消除，仅剩既有 dynamic/static import notices
+- `pwsh -File scripts/build_desktop.ps1` → succeeded；重建 `dist\基金智能分析.exe`，424,684,570 bytes，LastWriteTime 2026-05-31 15:01:27
+- Rebuilt EXE GUI smoke → passed；login / Dashboard / Holdings / Risk Exposure / Investment Plans / Settings user profile / Toolbox / OCR Import 均可打开，无 429 / 500 / page error
+
+### 后续协作者注意
+
+- 未伪造 OCR 真实截图验收：仓库和 `data/ocr_temp` 没有支付宝 / 天天基金截图；只完成了基于真实持仓数据的 OCR 对账服务路径验证。
+- 源库当前 `fund_fee_schedules=0`；P2.4 费率体检和转换节省要业务可信，需要先录入或同步真实费率表。
+- `build/` 已在 `.gitignore` 中保持忽略，PyInstaller 中间产物不进入 review diff；发布只关注源码和最终本地 `dist` 产物。
+
+---
+
+## [2026-05-27（晚间）] — V3/P2 API 端点级测试补齐 ✅
+
+> **任务来源**：TODO.md `Medium` 区累计 4 项 endpoint-level 测试欠账
+> **执行人**：Claude
+> **任务编号**：tests-coverage / 质量护栏
+> **回退方式**：git revert 本节文件即可；仅新增测试文件 + conftest 改动，不动业务代码
+
+#### 测试新增（8 个文件，91 个新用例）
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/tests/test_investment_plan_endpoints.py` | NEW | /api/investment-plans 9 端点：CRUD + upcoming + smile-curve + reconcile + check-due（14 cases） |
+| `backend/tests/test_fund_manager_endpoints.py` | NEW | /api/funds/{code}/managers + /api/manager-alerts；monkeypatch 屏蔽真实 HTTP（12 cases） |
+| `backend/tests/test_asset_allocation_endpoints.py` | NEW | /api/asset-allocation 7 端点：targets CRUD + current + deviations + alerts + ack（11 cases） |
+| `backend/tests/test_user_profile_endpoints.py` | NEW | /api/user/profile：GET/PUT + recommend-allocation（8 cases） |
+| `backend/tests/test_fund_fee_endpoints.py` | NEW | /api/fund-fees：schedules CRUD + accrual + ledger + redemption-estimate（12 cases） |
+| `backend/tests/test_decision_review_endpoints.py` | NEW | /api/decision-review：bias + persist + history + decisions + run（9 cases） |
+| `backend/tests/test_ocr_endpoints.py` | NEW | /api/ocr/(status\|diff-preview\|confirm-snapshot)（12 cases） |
+| `backend/tests/test_toolbox_endpoints.py` | NEW | /api/toolbox/*：milestones + quarterly + switch-savings + holidays + fee-health（13 cases） |
+
+#### 基础设施改动
+
+| 文件 | 类型 | 概要 |
+|---|---|---|
+| `backend/tests/conftest.py` | MOD | 加 `register_and_login()` helper + `auth_headers` fixture，端点测试无需各自实现样板；同时 monkeypatch `RateLimitMiddleware.dispatch` 跳过限流（默认 120/min 在 153 case 全量跑下必触发 429） |
+
+### 本次验证证据
+
+- `python -m pytest backend/tests/test_investment_plan_endpoints.py -v` → 14 passed
+- `python -m pytest backend/tests/test_fund_manager_endpoints.py -v` → 12 passed
+- `python -m pytest backend/tests/test_asset_allocation_endpoints.py -v` → 11 passed
+- `python -m pytest backend/tests/test_user_profile_endpoints.py -v` → 8 passed
+- `python -m pytest backend/tests/test_fund_fee_endpoints.py -v` → 12 passed
+- `python -m pytest backend/tests/test_decision_review_endpoints.py -v` → 9 passed
+- `python -m pytest backend/tests/test_ocr_endpoints.py -v` → 12 passed
+- `python -m pytest backend/tests/test_toolbox_endpoints.py -v` → 13 passed
+- `python -m pytest backend/tests/ -v` → **153 passed**（62 → 153，+91）
+
+### 诊断纪要：全量跑 429 限流
+
+定位过程：单文件、双文件组合都通过；6+ 文件叠加时 `test_funds.py` `_setup_and_login` 出现 `KeyError: 'access_token'`。临时加 detail 后看到 `setup=429 / login=429`，确认是 `backend/middleware/rate_limit.py` 在 60s 内累积 120+ 请求触发限流，与 V3 业务逻辑无关。修复采用最小侵入：仅在 `backend/tests/conftest.py` 用 monkeypatch 替换 `RateLimitMiddleware.dispatch`，保持中间件本身在生产环境的行为不变。
+
+---
+
 ## [2026-05-27（下午 13:40-13:58）] — P2.4 老基民工具箱接入 + 稳定性修复 ✅
 
 > **任务来源**：查看更新日志后继续推进 `senior-investor-upgrade-plan.md` § P2.4
