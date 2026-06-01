@@ -30,6 +30,8 @@ def init_scheduler():
         job_calculate_pnl,
         job_ai_advice,
         job_update_holdings_nav,
+        job_review_outcomes,
+        job_recalculate_profile,
     )
 
     # A股指数行情 - 交易时间每5分钟
@@ -84,6 +86,20 @@ def init_scheduler():
         job_ai_advice,
         CronTrigger(day_of_week="mon-fri", hour=settings.AI_ADVICE_HOUR, minute=settings.AI_ADVICE_MINUTE),
         id="ai_advice", name="AI尾盘持仓建议",
+    )
+
+    # 每日复盘 - 每日15:30
+    _scheduler.add_job(
+        job_review_outcomes,
+        CronTrigger(hour=15, minute=30),
+        id="review_outcomes", name="建议复盘",
+    )
+
+    # AI画像更新 - 每日21:00
+    _scheduler.add_job(
+        job_recalculate_profile,
+        CronTrigger(hour=21, minute=0),
+        id="recalculate_profile", name="AI画像更新",
     )
 
     _scheduler.start()
@@ -147,6 +163,8 @@ def trigger_job_now(job_id: str) -> dict:
         "collect_news": jobs.job_collect_news,
         "calculate_pnl": jobs.job_calculate_pnl,
         "ai_advice": jobs.job_ai_advice,
+        "review_outcomes": jobs.job_review_outcomes,
+        "recalculate_profile": jobs.job_recalculate_profile,
     }
 
     func = job_func_map.get(job_id)

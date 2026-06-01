@@ -28,7 +28,7 @@ def get_db():
 def init_db():
     """初始化数据库，创建所有表"""
     # 导入所有模型以确保它们被注册
-    from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group  # noqa: F401
+    from backend.models import fund, holding, trade, market_snapshot, news, ai_advice, fund_group, ai_advice_memory, ai_advice_outcome, user_ai_profile  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     _ensure_sqlite_columns()

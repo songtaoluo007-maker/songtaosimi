@@ -96,3 +96,61 @@ def job_update_holdings_nav():
     """更新持仓净值+市值"""
     from backend.services.fund_nav_collector import collect_fund_nav
     collect_fund_nav()
+
+
+def job_review_outcomes():
+    """复盘任务：检查到期的建议并生成 outcome"""
+    from backend.database import SessionLocal
+    from backend.services.outcome_service import OutcomeService
+    db = SessionLocal()
+    try:
+        svc = OutcomeService(db)
+        result = svc.run_review()
+        logger.info(f"复盘任务完成: 新增{result['created']}条, 跳过{result['skipped']}条")
+        if result['errors']:
+            logger.warning(f"复盘错误: {result['errors']}")
+    except Exception as e:
+        logger.error(f"复盘任务失败: {e}")
+    finally:
+        db.close()
+
+
+def job_recalculate_profile():
+    """重新计算 AI 推断画像"""
+    from backend.database import SessionLocal
+    from backend.models.user_ai_profile import UserAiProfile
+    from backend.services.memory_service import MemoryService
+    db = SessionLocal()
+    try:
+        memory_svc = MemoryService(db)
+        total = memory_svc.count_total()
+        accepted = memory_svc.count_accepted()
+        rejected = memory_svc.count_rejected()
+
+        profile = db.query(UserAiProfile).first()
+        if not profile:
+            profile = UserAiProfile()
+            db.add(profile)
+
+        profile.total_advices = total
+        profile.accepted_count = accepted
+        profile.rejected_count = rejected
+
+        if total > 0:
+            acceptance_rate = accepted / total
+            if acceptance_rate > 0.7:
+                profile.confidence_adjustment = 0.1
+                profile.evidence_summary = f"用户采纳率 {acceptance_rate:.0%}，建议可信度调高"
+            elif acceptance_rate < 0.3:
+                profile.confidence_adjustment = -0.1
+                profile.evidence_summary = f"用户采纳率 {acceptance_rate:.0%}，建议需更贴合用户偏好"
+            else:
+                profile.confidence_adjustment = 0.0
+                profile.evidence_summary = f"用户采纳率 {acceptance_rate:.0%}，保持当前策略"
+
+        db.commit()
+        logger.info(f"画像更新完成: 总{total}条, 采纳{accepted}, 拒绝{rejected}")
+    except Exception as e:
+        logger.error(f"画像更新失败: {e}")
+    finally:
+        db.close()

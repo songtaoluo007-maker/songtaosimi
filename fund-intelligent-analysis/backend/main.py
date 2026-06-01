@@ -101,6 +101,7 @@ from backend.api.ocr import router as ocr_router
 from backend.api.dashboard import router as dashboard_router
 from backend.api.settings import router as settings_router
 from backend.api.fund_group import router as group_router
+from backend.api.personal_analyst import router as personal_analyst_router
 
 app.include_router(fund_router)
 app.include_router(holding_router)
@@ -112,6 +113,7 @@ app.include_router(ocr_router)
 app.include_router(dashboard_router)
 app.include_router(settings_router)
 app.include_router(group_router)
+app.include_router(personal_analyst_router)
 
 
 @app.get("/api/health")
