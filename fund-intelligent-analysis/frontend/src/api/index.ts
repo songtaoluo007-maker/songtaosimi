@@ -85,3 +85,18 @@ export const getSettings = () => request.get('/settings')
 export const getSchedulerStatus = () => request.get('/settings/scheduler-status')
 export const getDiagnostics = () => request.get('/settings/diagnostics')
 export const triggerJob = (jobId: string) => request.post(`/settings/scheduler/trigger/${jobId}`)
+
+// P3 专属 AI 分析师
+export const getPersonalAnalystProfile = () => request.get('/personal-analyst/profile')
+export const recalculatePersonalAnalystProfile = () => request.post('/personal-analyst/profile/recalculate')
+export const getPersonalAnalystMemories = (limit = 50, offset = 0) =>
+  request.get('/personal-analyst/memories', { params: { limit, offset } })
+export const getPersonalAnalystMemory = (id: number) => request.get(`/personal-analyst/memories/${id}`)
+export const submitPersonalAnalystFeedback = (id: number, data: any) =>
+  request.post(`/personal-analyst/memories/${id}/feedback`, data)
+export const getPersonalAnalystOutcomes = (limit = 50) =>
+  request.get('/personal-analyst/outcomes', { params: { limit } })
+export const runPersonalAnalystOutcomes = () => request.post('/personal-analyst/outcomes/run')
+export const getPersonalAnalystSimilarCases = (params: any) =>
+  request.get('/personal-analyst/similar-cases', { params })
+export const getPersonalAnalystReport = () => request.get('/personal-analyst/report')
