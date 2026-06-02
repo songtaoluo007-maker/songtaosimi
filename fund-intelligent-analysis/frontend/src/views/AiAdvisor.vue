@@ -30,17 +30,17 @@
       </template>
 
       <el-row :gutter="12" style="margin-bottom: 16px;">
-        <el-col :span="6">
+        <el-col :xs="12" :md="6">
           <el-statistic title="持仓数量" :value="dataQuality.holdings_count || 0" />
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :md="6">
           <el-statistic title="近新闻数" :value="dataQuality.recent_news_count || 0" />
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :md="6">
           <div class="quality-label">指数时间</div>
           <div class="quality-value">{{ dataQuality.latest_index_time || '暂无' }}</div>
         </el-col>
-        <el-col :span="6">
+        <el-col :xs="12" :md="6">
           <div class="quality-label">估值时间</div>
           <div class="quality-value">{{ dataQuality.latest_fund_estimate_time || '暂无' }}</div>
         </el-col>

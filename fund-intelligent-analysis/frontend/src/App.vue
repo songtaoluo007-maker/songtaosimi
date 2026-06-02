@@ -2,7 +2,9 @@
   <el-container class="app-shell">
     <el-aside width="232px" class="sidebar">
       <div class="brand">
-        <div class="brand-mark">AI</div>
+        <div class="brand-mark">
+          <img :src="brandIcon" alt="基金智能分析" />
+        </div>
         <div>
           <strong>基金智能分析</strong>
           <span>本地私人系统</span>
@@ -75,6 +77,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
+const brandIcon = '/brand-assets/fund-ai-64.png'
 const route = useRoute()
 const activeRoute = computed(() => {
   // /ai-analyst 保持高亮
@@ -94,6 +97,7 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
   background: #f3f6fa;
+  overflow-x: hidden;
 }
 
 .app-shell {
@@ -122,10 +126,19 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: #2f6fef;
+  background: #ffffff;
+  border: 1px solid rgba(47, 111, 239, 0.22);
   display: grid;
   place-items: center;
-  font-weight: 800;
+  flex: 0 0 40px;
+  overflow: hidden;
+}
+
+.brand-mark img {
+  width: 34px;
+  height: 34px;
+  display: block;
+  object-fit: contain;
 }
 
 .brand strong,
@@ -195,5 +208,127 @@ body {
 .main {
   padding: 24px;
   overflow-y: auto;
+}
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+.el-card,
+.panel,
+.el-table,
+.el-tabs,
+.el-form,
+.el-descriptions {
+  max-width: 100%;
+}
+
+.el-table {
+  overflow: hidden;
+}
+
+.el-dialog {
+  max-width: calc(100vw - 32px);
+}
+
+@media (max-width: 1180px) {
+  .sidebar {
+    width: 84px !important;
+  }
+
+  .brand {
+    justify-content: center;
+    padding: 16px 12px;
+  }
+
+  .brand > div:not(.brand-mark),
+  .menu-group-label,
+  .nav-menu .el-menu-item span,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .nav-menu {
+    padding: 10px;
+  }
+
+  .nav-menu .el-menu-item {
+    justify-content: center;
+    padding: 0 !important;
+  }
+
+  .main {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100% !important;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .brand {
+    height: auto;
+    justify-content: flex-start;
+    border-bottom: 0;
+    padding: 12px 14px 8px;
+  }
+
+  .brand > div:not(.brand-mark) {
+    display: block;
+  }
+
+  .nav-menu {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 0 12px 12px;
+    white-space: nowrap;
+  }
+
+  .nav-menu .el-menu-item {
+    flex: 0 0 auto;
+    padding: 0 14px !important;
+  }
+
+  .nav-menu .el-menu-item span {
+    display: inline;
+  }
+
+  .menu-group-label,
+  .sidebar-footer {
+    display: none;
+  }
+
+  .main {
+    padding: 14px;
+  }
+
+  .el-card__body,
+  .el-card__header {
+    padding: 12px;
+  }
+
+  .el-form--inline .el-form-item {
+    display: block;
+    margin-right: 0;
+  }
+
+  .el-form--inline .el-input,
+  .el-form--inline .el-select {
+    width: 100% !important;
+  }
 }
 </style>

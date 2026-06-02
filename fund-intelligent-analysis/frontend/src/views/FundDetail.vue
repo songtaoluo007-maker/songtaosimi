@@ -10,7 +10,7 @@
     </div>
 
     <el-row :gutter="12" class="cards">
-      <el-col :span="4" v-for="item in returnCards" :key="item.label">
+      <el-col :xs="12" :sm="8" :md="6" :lg="4" v-for="item in returnCards" :key="item.label">
         <div class="mini-card">
           <span>{{ item.label }}</span>
           <strong :class="profitClass(item.value)">{{ formatPercent(item.value) }}</strong>

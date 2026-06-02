@@ -20,13 +20,13 @@
 
     <!-- 汇总统计 -->
     <el-row :gutter="20" style="margin-bottom: 20px;">
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">总市值</div>
           <div style="font-size: 22px; font-weight: bold;">{{ privacyMoney(summary.total_value) }}</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">当日盈亏</div>
           <div :style="{ fontSize: '22px', fontWeight: 'bold', color: summary.total_daily_pnl >= 0 ? '#f56c6c' : '#67c23a' }">
@@ -35,7 +35,7 @@
           <div style="color: #909399; font-size: 12px;">{{ summary.daily_pnl_date || '待刷新/导入' }}</div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">总盈亏</div>
           <div :style="{ fontSize: '22px', fontWeight: 'bold', color: summary.total_pnl >= 0 ? '#f56c6c' : '#67c23a' }">
@@ -43,7 +43,7 @@
           </div>
         </el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :xs="24" :sm="12" :lg="6">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">盈亏比例</div>
           <div :style="{ fontSize: '22px', fontWeight: 'bold', color: summary.total_pnl_ratio >= 0 ? '#f56c6c' : '#67c23a' }">
@@ -73,7 +73,7 @@
     <el-card v-if="groups.length" shadow="hover" style="margin-bottom: 20px;">
       <template #header><span style="font-weight: bold;">基金组</span></template>
       <el-row :gutter="12">
-        <el-col :span="6" v-for="g in groups" :key="g.id">
+        <el-col :xs="24" :sm="12" :lg="6" v-for="g in groups" :key="g.id">
           <div class="group-card" :style="{ borderColor: g.color }">
             <div class="group-title"><span :style="{ background: g.color }"></span>{{ g.name }}</div>
             <div>基金数：{{ g.holding_count }}</div>

@@ -63,7 +63,7 @@
 
     <el-row :gutter="20">
       <!-- 基本配置 -->
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="hover" style="margin-bottom: 20px;">
           <template #header><span style="font-weight: bold;">AI配置</span></template>
           <el-descriptions :column="1" border>
@@ -99,7 +99,7 @@
       </el-col>
 
       <!-- 调度状态 -->
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="hover">
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center;">

@@ -17,14 +17,14 @@
 
     <el-row :gutter="16" class="metric-row">
       <el-col :xs="24" :sm="12" :lg="6">
-        <div class="metric">
+        <div class="metric clickable-card" role="button" tabindex="0" @click="go('/holdings')" @keydown.enter="go('/holdings')">
           <span>总资产</span>
           <strong>¥{{ money(portfolio.total_value) }}</strong>
           <em>{{ portfolio.holding_count || 0 }} 只持仓</em>
         </div>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <div class="metric">
+        <div class="metric clickable-card" role="button" tabindex="0" @click="go('/holdings')" @keydown.enter="go('/holdings')">
           <span>总盈亏</span>
           <strong :class="profitClass(portfolio.total_pnl)">
             {{ signedMoney(portfolio.total_pnl) }}
@@ -35,14 +35,14 @@
         </div>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <div class="metric">
+        <div class="metric clickable-card" role="button" tabindex="0" @click="go('/holdings')" @keydown.enter="go('/holdings')">
           <span>最大单仓</span>
           <strong>{{ percent(portfolio.top_weight) }}</strong>
           <em>集中度监控</em>
         </div>
       </el-col>
       <el-col :xs="24" :sm="12" :lg="6">
-        <div class="metric">
+        <div class="metric clickable-card" role="button" tabindex="0" @click="go('/market')" @keydown.enter="go('/market')">
           <span>数据状态</span>
           <strong>{{ freshnessLabel }}</strong>
           <em>新闻 {{ command.data_freshness?.recent_news_count || 0 }} 条</em>
@@ -69,7 +69,9 @@
           </div>
 
           <div v-if="latestAdvice" class="advice-body">
-            <div class="advice-summary">{{ displayText(latestAdvice.overall_suggestion || latestAdvice.reasoning || '暂无总体建议') }}</div>
+            <div class="advice-summary clickable-card" role="button" tabindex="0" @click="go('/ai-analyst')" @keydown.enter="go('/ai-analyst')">
+              {{ displayText(latestAdvice.overall_suggestion || latestAdvice.reasoning || '暂无总体建议') }}
+            </div>
             <div class="action-strip">
               <div>
                 <span>加仓</span>
@@ -84,7 +86,13 @@
                 <strong>{{ command.action_counts?.hold || 0 }}</strong>
               </div>
             </div>
-            <el-table :data="latestAdvice.actions || []" height="300" stripe>
+            <el-table
+              :data="latestAdvice.actions || []"
+              height="300"
+              stripe
+              :row-class-name="clickableRowClass"
+              @row-click="goAdviceFund"
+            >
               <el-table-column prop="fund_code" label="代码" width="92" />
               <el-table-column prop="fund_name" label="基金" min-width="180" show-overflow-tooltip />
               <el-table-column label="动作" width="92">
@@ -115,7 +123,16 @@
             <h2>风险雷达</h2>
           </div>
           <div class="risk-list">
-            <div v-for="item in command.risk_flags || []" :key="item.title" class="risk-item" :class="item.level">
+            <div
+              v-for="item in command.risk_flags || []"
+              :key="item.title"
+              class="risk-item clickable-card"
+              :class="item.level"
+              role="button"
+              tabindex="0"
+              @click="goRisk(item)"
+              @keydown.enter="goRisk(item)"
+            >
               <div>
                 <strong>{{ item.title }}</strong>
                 <span>{{ item.detail }}</span>
@@ -129,15 +146,15 @@
             <h2>数据新鲜度</h2>
           </div>
           <div class="fresh-grid">
-            <div>
+            <div class="clickable-card" role="button" tabindex="0" @click="go('/market')" @keydown.enter="go('/market')">
               <span>指数</span>
               <strong>{{ command.data_freshness?.latest_index_time || '暂无' }}</strong>
             </div>
-            <div>
+            <div class="clickable-card" role="button" tabindex="0" @click="go('/holdings')" @keydown.enter="go('/holdings')">
               <span>估值</span>
               <strong>{{ command.data_freshness?.latest_fund_estimate_time || '暂无' }}</strong>
             </div>
-            <div>
+            <div class="clickable-card" role="button" tabindex="0" @click="go('/news')" @keydown.enter="go('/news')">
               <span>新闻</span>
               <strong>{{ command.data_freshness?.recent_news_count || 0 }} 条</strong>
             </div>
@@ -153,7 +170,13 @@
             <h2>核心持仓</h2>
             <el-button text @click="$router.push('/holdings')">查看全部</el-button>
           </div>
-          <el-table :data="command.top_positions || []" height="340" stripe>
+          <el-table
+            :data="command.top_positions || []"
+            height="340"
+            stripe
+            :row-class-name="clickableRowClass"
+            @row-click="goPositionFund"
+          >
             <el-table-column prop="fund_code" label="代码" width="92" />
             <el-table-column prop="fund_name" label="基金" min-width="180" show-overflow-tooltip />
             <el-table-column label="市值" width="118">
@@ -172,7 +195,7 @@
       </el-col>
 
       <el-col :xs="24" :lg="12">
-        <section class="panel">
+        <section class="panel clickable-card" role="button" tabindex="0" @click="go('/holdings')" @keydown.enter="go('/holdings')">
           <div class="panel-head compact">
             <h2>资产配置</h2>
           </div>
@@ -185,6 +208,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -195,6 +219,7 @@ import { getAssetAllocation, getCommandCenter, generateAdvice } from '../api'
 
 use([PieChart, TooltipComponent, LegendComponent, CanvasRenderer])
 
+const router = useRouter()
 const command = ref<any>({})
 const allocation = ref<any[]>([])
 const refreshing = ref(false)
@@ -291,6 +316,37 @@ function displayText(value: any) {
     .replaceAll('今日涨跌', '最近交易日涨跌')
     .replaceAll('今日', '最近交易日')
     .replaceAll('当天', '最近交易日')
+}
+
+function go(path: string) {
+  router.push(path)
+}
+
+function goFund(code: any) {
+  const fundCode = String(code || '').trim()
+  if (!fundCode) return
+  router.push(`/fund/${encodeURIComponent(fundCode)}`)
+}
+
+function goAdviceFund(row: any) {
+  goFund(row?.fund_code)
+}
+
+function goPositionFund(row: any) {
+  goFund(row?.fund_code)
+}
+
+function goRisk(item: any) {
+  const text = `${item?.title || ''} ${item?.detail || ''}`
+  if (/AI|建议|模型|复盘/.test(text)) {
+    go('/ai-analyst')
+    return
+  }
+  go('/holdings')
+}
+
+function clickableRowClass() {
+  return 'clickable-row'
 }
 
 async function loadData() {
@@ -532,5 +588,101 @@ h2 {
 
 .down {
   color: #259b72 !important;
+}
+
+.clickable-card {
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.clickable-card:hover {
+  border-color: rgba(47, 111, 239, 0.42);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.clickable-card:focus-visible {
+  outline: 2px solid #2f6fef;
+  outline-offset: 2px;
+}
+
+:deep(.clickable-row) {
+  cursor: pointer;
+}
+
+:deep(.clickable-row:hover td.el-table__cell) {
+  background: #eef4ff !important;
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .toolbar .el-button {
+    flex: 1 1 148px;
+    margin-left: 0;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .metric {
+    min-height: auto;
+  }
+
+  .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .panel-head.compact {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .tag-group {
+    justify-content: flex-start;
+  }
+
+  .chart {
+    height: 300px;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard {
+    min-width: 0;
+  }
+
+  .panel,
+  .metric {
+    padding: 12px;
+  }
+
+  .metric strong {
+    font-size: 22px;
+  }
+
+  .action-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .fresh-grid div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chart {
+    height: 260px;
+  }
 }
 </style>

@@ -9,19 +9,19 @@
 
     <!-- 统计 -->
     <el-row :gutter="20" style="margin-bottom: 20px;">
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">总买入</div>
           <div style="font-size: 20px; font-weight: bold; color: #f56c6c;">¥{{ stats.buy_total?.toLocaleString() }}</div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">总卖出</div>
           <div style="font-size: 20px; font-weight: bold; color: #67c23a;">¥{{ stats.sell_total?.toLocaleString() }}</div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="hover">
           <div style="color: #909399; font-size: 13px;">总手续费</div>
           <div style="font-size: 20px; font-weight: bold;">¥{{ stats.fee_total?.toLocaleString() }}</div>
